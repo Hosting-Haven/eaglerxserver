@@ -100,21 +100,11 @@ import net.lax1dude.eaglercraft.backend.server.config.EnumConfigFormat;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.TextComponent;
 
-@Plugin(
-	name = PlatformPluginBukkit.PLUGIN_NAME,
-	version = PlatformPluginBukkit.PLUGIN_VERSION,
-	description = "Official EaglercraftX plugin for Spigot and Paper servers",
-	spigot = @Spigot(
-		authors = {
-			PlatformPluginBukkit.PLUGIN_AUTHOR
-		},
-		website = "https://lax1dude.net/eaglerxserver",
-		prefix = "EaglerXServer"
-	),
-	dependencies = {
+@Plugin(name = PlatformPluginBukkit.PLUGIN_NAME, version = PlatformPluginBukkit.PLUGIN_VERSION, description = "Official EaglercraftX plugin for Spigot and Paper servers", spigot = @Spigot(authors = {
+		PlatformPluginBukkit.PLUGIN_AUTHOR
+}, website = "https://lax1dude.net/eaglerxserver", prefix = "EaglerXServer"), dependencies = {
 		@Dependency(name = "SkinsRestorer", type = DependencyType.SOFTDEPEND)
-	}
-)
+})
 public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player> {
 
 	public static final String PLUGIN_NAME = EaglerXServerAPI.PLUGIN_NAME;

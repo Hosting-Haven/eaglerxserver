@@ -98,18 +98,11 @@ import net.lax1dude.eaglercraft.backend.server.config.EnumConfigFormat;
 import net.lax1dude.eaglercraft.backend.server.velocity.chat.VelocityComponentHelper;
 import net.lax1dude.eaglercraft.backend.server.velocity.event.VelocityEventDispatchAdapter;
 
-@Plugin(
-	id = PlatformPluginVelocity.PLUGIN_ID,
-	name = PlatformPluginVelocity.PLUGIN_NAME,
-	version = PlatformPluginVelocity.PLUGIN_VERSION,
-	description = "Official EaglercraftX plugin for Velocity servers",
-	authors = {
+@Plugin(id = PlatformPluginVelocity.PLUGIN_ID, name = PlatformPluginVelocity.PLUGIN_NAME, version = PlatformPluginVelocity.PLUGIN_VERSION, description = "Official EaglercraftX plugin for Velocity servers", authors = {
 		PlatformPluginVelocity.PLUGIN_AUTHOR
-	},
-	dependencies = {
+}, dependencies = {
 		@Dependency(id = "skinsrestorer", optional = true)
-	}
-)
+})
 public class PlatformPluginVelocity implements IPlatform<Player> {
 
 	public static final String PLUGIN_ID = EaglerXServerAPI.PLUGIN_ID;
@@ -223,7 +216,8 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 			}
 
 			@Override
-			public void setPlayerInitializer(IEaglerXServerPlayerInitializer<? extends IPipelineData, ?, Player> initializer) {
+			public void setPlayerInitializer(
+					IEaglerXServerPlayerInitializer<? extends IPipelineData, ?, Player> initializer) {
 				playerInitializer = (IEaglerXServerPlayerInitializer<IPipelineData, Object, Player>) initializer;
 			}
 
@@ -416,7 +410,8 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 		}
 		for (IEaglerXServerListener listener : listenersList) {
 			if (listener.isCloneListenerEnabled()) {
-				logger().info("EaglerXServer is attempting to clone listener for: " + listener.getCloneListenerAddress());
+				logger().info(
+						"EaglerXServer is attempting to clone listener for: " + listener.getCloneListenerAddress());
 				VelocityUnsafe.cloneListener(proxy, listener.getCloneListenerAddress());
 			}
 		}
@@ -640,7 +635,8 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 			List<GameProfile.Property> fixedProps = new LinkedList<>(props);
 			if (initializer.texturesPropertyValue != null) {
 				fixedProps.removeIf(texturesPredicate);
-				fixedProps.add(new Property("textures", initializer.texturesPropertyValue, initializer.texturesPropertySignature));
+				fixedProps.add(new Property("textures", initializer.texturesPropertyValue,
+						initializer.texturesPropertySignature));
 				initializer.texturesPropertyValue = null;
 				initializer.texturesPropertySignature = null;
 			}

@@ -138,69 +138,69 @@ public class VanillaInitializer {
 				}
 			} else if (connectionState == STATE_SENT_LOGIN) {
 				switch (pktId) {
-				case 0x00:
-					// S00PacketDisconnect
-					handleKickPacket(ctx, msg);
-					break;
-				case 0x01:
-					// S01PacketEncryptionRequest
-					inboundHandler.terminateErrorCode(ctx, pipelineData.handshakeProtocol,
-							HandshakePacketTypes.SERVER_ERROR_CUSTOM_MESSAGE, HandshakePacketTypes.MSG_ONLINE_MODE);
-					break;
-				case 0x02:
-					connectionState = STATE_STALLING;
-					// S02PacketLoginSuccess
-					UUID playerUUID;
-					String usernameStr;
-					int mcProto = backendMinecraftProtocol;
-					msg.markReaderIndex();
-					try {
-						if (mcProto >= 735) {
-							playerUUID = new UUID(msg.readLong(), msg.readLong());
-							usernameStr = BufferUtils.readMCString(msg, 16);
-							if (mcProto >= 759) {
-								int propCount = BufferUtils.readVarInt(msg, 5);
-								for (int j = 0; j < propCount; ++j) {
-									msg.skipBytes(BufferUtils.readVarInt(msg, 5));
-									msg.skipBytes(BufferUtils.readVarInt(msg, 5));
-									if (msg.readBoolean()) {
+					case 0x00:
+						// S00PacketDisconnect
+						handleKickPacket(ctx, msg);
+						break;
+					case 0x01:
+						// S01PacketEncryptionRequest
+						inboundHandler.terminateErrorCode(ctx, pipelineData.handshakeProtocol,
+								HandshakePacketTypes.SERVER_ERROR_CUSTOM_MESSAGE, HandshakePacketTypes.MSG_ONLINE_MODE);
+						break;
+					case 0x02:
+						connectionState = STATE_STALLING;
+						// S02PacketLoginSuccess
+						UUID playerUUID;
+						String usernameStr;
+						int mcProto = backendMinecraftProtocol;
+						msg.markReaderIndex();
+						try {
+							if (mcProto >= 735) {
+								playerUUID = new UUID(msg.readLong(), msg.readLong());
+								usernameStr = BufferUtils.readMCString(msg, 16);
+								if (mcProto >= 759) {
+									int propCount = BufferUtils.readVarInt(msg, 5);
+									for (int j = 0; j < propCount; ++j) {
 										msg.skipBytes(BufferUtils.readVarInt(msg, 5));
+										msg.skipBytes(BufferUtils.readVarInt(msg, 5));
+										if (msg.readBoolean()) {
+											msg.skipBytes(BufferUtils.readVarInt(msg, 5));
+										}
 									}
 								}
+								if (mcProto >= 766 && msg.isReadable()) {
+									msg.readBoolean();
+								}
+							} else {
+								String uuidStr = BufferUtils.readMCString(msg, 36);
+								playerUUID = UUID.fromString(uuidStr);
+								usernameStr = BufferUtils.readMCString(msg, 16);
 							}
-							if (mcProto >= 766 && msg.isReadable()) {
-								msg.readBoolean();
-							}
-						} else {
-							String uuidStr = BufferUtils.readMCString(msg, 36);
+						} catch (IndexOutOfBoundsException | IllegalArgumentException ex) {
+							msg.resetReaderIndex();
+							String uuidStr = BufferUtils.readMCString(msg, 64);
 							playerUUID = UUID.fromString(uuidStr);
 							usernameStr = BufferUtils.readMCString(msg, 16);
 						}
-					} catch (IndexOutOfBoundsException | IllegalArgumentException ex) {
+						if (retryCount > 0) {
+							pipelineData.connectionLogger.info("Backend protocol fallback succeeded with protocol "
+									+ backendMinecraftProtocol + " after trying " + formatTriedProtocols());
+						}
+						inboundHandler.handleBackendHandshakeSuccess(ctx, usernameStr, playerUUID);
+						break;
+					case 0x03:
+						// S03PacketEnableCompression
+						break;
+					case 0x3F:
+						// S3FPacketCustomPayload
 						msg.resetReaderIndex();
-						String uuidStr = BufferUtils.readMCString(msg, 64);
-						playerUUID = UUID.fromString(uuidStr);
-						usernameStr = BufferUtils.readMCString(msg, 16);
-					}
-					if (retryCount > 0) {
-						pipelineData.connectionLogger.info("Backend protocol fallback succeeded with protocol "
-								+ backendMinecraftProtocol + " after trying " + formatTriedProtocols());
-					}
-					inboundHandler.handleBackendHandshakeSuccess(ctx, usernameStr, playerUUID);
-					break;
-				case 0x03:
-					// S03PacketEnableCompression
-					break;
-				case 0x3F:
-					// S3FPacketCustomPayload
-					msg.resetReaderIndex();
-					bufferedPackets.add(msg.retain());
-					break;
-				default:
-					inboundHandler.terminateInternalError(ctx, pipelineData.handshakeProtocol);
-					pipelineData.connectionLogger
-							.error("Disconnecting, server sent unknown packet " + pktId + " while handshaking");
-					break;
+						bufferedPackets.add(msg.retain());
+						break;
+					default:
+						inboundHandler.terminateInternalError(ctx, pipelineData.handshakeProtocol);
+						pipelineData.connectionLogger
+								.error("Disconnecting, server sent unknown packet " + pktId + " while handshaking");
+						break;
 				}
 			} else if (connectionState == STATE_STALLING) {
 				if (pktId == 0x40) {

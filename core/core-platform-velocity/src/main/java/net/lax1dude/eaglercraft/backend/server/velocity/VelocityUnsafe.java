@@ -363,10 +363,12 @@ public class VelocityUnsafe {
 						if (override != null) {
 							ProtocolVersion version = ProtocolVersion.getProtocolVersion(override.intValue());
 							if (version.isSupported()) {
-									trace("backend handshake override server=" + serverName + " protocol=" + version.getProtocol()
+								trace("backend handshake override server=" + serverName + " protocol="
+										+ version.getProtocol()
 										+ " packet=" + msg.getClass().getName());
 								if (isVelocityClass(msg, "com.velocitypowered.proxy.protocol.packet.HandshakePacket")) {
-									msg.getClass().getMethod("setProtocolVersion", ProtocolVersion.class).invoke(msg, version);
+									msg.getClass().getMethod("setProtocolVersion", ProtocolVersion.class).invoke(msg,
+											version);
 								}
 								if (mc.getProtocolVersion() != version) {
 									method_MinecraftConnection_setProtocolVersion.invoke(mc, version);
@@ -503,6 +505,7 @@ public class VelocityUnsafe {
 				protected Multimap delegate() {
 					return impl;
 				}
+
 				@Override
 				@SuppressWarnings("unchecked")
 				public boolean put(Object key, Object value) {
@@ -528,6 +531,7 @@ public class VelocityUnsafe {
 				protected Map delegate() {
 					return impl;
 				}
+
 				@Override
 				@SuppressWarnings("unchecked")
 				public Object put(Object key, Object value) {

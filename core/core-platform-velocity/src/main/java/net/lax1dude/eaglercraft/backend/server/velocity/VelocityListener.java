@@ -178,7 +178,7 @@ class VelocityListener {
 		if (plugin.isHeavyConnectionDebugEnabled()) {
 			plugin.logger().info("[trace] post-connect player=" + connectEvent.getPlayer().getUsername()
 					+ " currentServer=" + connectEvent.getPlayer().getCurrentServer().map((s) -> s.getServer()
-						.getServerInfo().getName()).orElse("<none>"));
+							.getServerInfo().getName()).orElse("<none>"));
 		}
 
 		Optional<ServerConnection> serverCon = connectEvent.getPlayer().getCurrentServer();
@@ -223,8 +223,9 @@ class VelocityListener {
 		if (attemptIndex >= plan.length || attemptIndex > MAX_PROTOCOL_RETRIES) {
 			plugin.logger().warn("[compat] Exhausted managed retries for " + player.getUsername() + " -> "
 					+ target.getServerInfo().getName() + " tried=" + tried);
-			disconnectOrNotifyFailure(player, target, Component.text("Unable to connect to " + target.getServerInfo().getName()
-					+ ": incompatible protocol"));
+			disconnectOrNotifyFailure(player, target,
+					Component.text("Unable to connect to " + target.getServerInfo().getName()
+							+ ": incompatible protocol"));
 			restoreManagedConnect(player);
 			return;
 		}
@@ -271,7 +272,8 @@ class VelocityListener {
 			}
 
 			Component reasonComponent = result != null ? result.getReasonComponent().orElse(null) : null;
-			String reason = reasonComponent != null ? plugin.getComponentHelper().serializePlainText(reasonComponent) : "";
+			String reason = reasonComponent != null ? plugin.getComponentHelper().serializePlainText(reasonComponent)
+					: "";
 			ConnectionRequestBuilder.Status status = result != null ? result.getStatus()
 					: ConnectionRequestBuilder.Status.SERVER_DISCONNECTED;
 
@@ -295,7 +297,8 @@ class VelocityListener {
 		} else {
 			player.disconnect(reasonComponent);
 		}
-		plugin.logger().warn("[compat] Final failure for " + player.getUsername() + " -> " + target.getServerInfo().getName());
+		plugin.logger()
+				.warn("[compat] Final failure for " + player.getUsername() + " -> " + target.getServerInfo().getName());
 	}
 
 	private boolean setBackendProtocolOverride(Player player, RegisteredServer target, int originalProtocol,

@@ -86,15 +86,9 @@ import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.api.plugin.PluginManager;
 
-@eu.hexagonmc.spigot.annotation.plugin.Plugin(
-	name = PlatformPluginBungee.PLUGIN_NAME,
-	version = PlatformPluginBungee.PLUGIN_VERSION,
-	description = "Official EaglercraftX plugin for BungeeCord and Waterfall servers",
-	bungee = @Bungee(author = PlatformPluginBungee.PLUGIN_AUTHOR),
-	dependencies = {
+@eu.hexagonmc.spigot.annotation.plugin.Plugin(name = PlatformPluginBungee.PLUGIN_NAME, version = PlatformPluginBungee.PLUGIN_VERSION, description = "Official EaglercraftX plugin for BungeeCord and Waterfall servers", bungee = @Bungee(author = PlatformPluginBungee.PLUGIN_AUTHOR), dependencies = {
 		@Dependency(name = "SkinsRestorer", type = DependencyType.SOFTDEPEND)
-	}
-)
+})
 public class PlatformPluginBungee extends Plugin implements IPlatform<ProxiedPlayer> {
 
 	public static final String PLUGIN_NAME = EaglerXServerAPI.PLUGIN_NAME;

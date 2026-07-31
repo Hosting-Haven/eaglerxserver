@@ -242,19 +242,19 @@ public class WebSocketEaglerInitialHandler extends MessageToMessageCodec<ByteBuf
 					minClientProtocol = j;
 				}
 				switch (j) {
-				case 2:
-					v2InList = true;
-					break;
-				case 3:
-					v3InList = true;
-					break;
-				case 4:
-					v4InList = true;
-					break;
-				case 5:
-					v5InList = true;
-					maxAllowedMC = maxAllowedMCV5;
-					break;
+					case 2:
+						v2InList = true;
+						break;
+					case 3:
+						v3InList = true;
+						break;
+					case 4:
+						v4InList = true;
+						break;
+					case 5:
+						v5InList = true;
+						maxAllowedMC = maxAllowedMCV5;
+						break;
 				}
 			}
 			if (maxAllowedMC == -1) {
@@ -507,48 +507,52 @@ public class WebSocketEaglerInitialHandler extends MessageToMessageCodec<ByteBuf
 		pipelineData.rewindMessageControllerHandle = initializer.getMessageControllerHandle();
 		int eaglerProtocol = initializer.getEaglerProtocol();
 		switch (eaglerProtocol) {
-		case 1:
-			if (protocols.isProtocolLegacyAllowed()) {
-				HandshakerV1 hs = new HandshakerV1(server, pipelineData, this);
-				handshaker = hs;
-				hs.init(ctx, initializer.getMinecraftProtocol(), initializer.getEaglerClientBrand(),
-						initializer.getEaglerClientVersion());
-			}
-			break;
-		case 2:
-			if (protocols.isProtocolLegacyAllowed()) {
-				HandshakerV2 hs = new HandshakerV2(server, pipelineData, this);
-				handshaker = hs;
-				hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
-						initializer.getMinecraftProtocol(), initializer.isAuthEnabled(), initializer.getAuthUsername());
-			}
-			break;
-		case 3:
-			if (protocols.isProtocolV3Allowed()) {
-				HandshakerV3 hs = new HandshakerV3(server, pipelineData, this);
-				handshaker = hs;
-				hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
-						initializer.getMinecraftProtocol(), initializer.isAuthEnabled(), initializer.getAuthUsername());
-			}
-			break;
-		case 4:
-			if (protocols.isProtocolV4Allowed()) {
-				HandshakerV4 hs = new HandshakerV4(server, pipelineData, this);
-				handshaker = hs;
-				hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
-						initializer.getMinecraftProtocol(), initializer.isAuthEnabled(), initializer.getAuthUsername());
-			}
-			break;
-		case 5:
-			if (protocols.isProtocolV5Allowed()) {
-				HandshakerV5 hs = new HandshakerV5(server, pipelineData, this);
-				handshaker = hs;
-				hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
-						initializer.getMinecraftProtocol(), initializer.isAuthEnabled(), initializer.getAuthUsername());
-			}
-			break;
-		default:
-			break;
+			case 1:
+				if (protocols.isProtocolLegacyAllowed()) {
+					HandshakerV1 hs = new HandshakerV1(server, pipelineData, this);
+					handshaker = hs;
+					hs.init(ctx, initializer.getMinecraftProtocol(), initializer.getEaglerClientBrand(),
+							initializer.getEaglerClientVersion());
+				}
+				break;
+			case 2:
+				if (protocols.isProtocolLegacyAllowed()) {
+					HandshakerV2 hs = new HandshakerV2(server, pipelineData, this);
+					handshaker = hs;
+					hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
+							initializer.getMinecraftProtocol(), initializer.isAuthEnabled(),
+							initializer.getAuthUsername());
+				}
+				break;
+			case 3:
+				if (protocols.isProtocolV3Allowed()) {
+					HandshakerV3 hs = new HandshakerV3(server, pipelineData, this);
+					handshaker = hs;
+					hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
+							initializer.getMinecraftProtocol(), initializer.isAuthEnabled(),
+							initializer.getAuthUsername());
+				}
+				break;
+			case 4:
+				if (protocols.isProtocolV4Allowed()) {
+					HandshakerV4 hs = new HandshakerV4(server, pipelineData, this);
+					handshaker = hs;
+					hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
+							initializer.getMinecraftProtocol(), initializer.isAuthEnabled(),
+							initializer.getAuthUsername());
+				}
+				break;
+			case 5:
+				if (protocols.isProtocolV5Allowed()) {
+					HandshakerV5 hs = new HandshakerV5(server, pipelineData, this);
+					handshaker = hs;
+					hs.init(ctx, initializer.getEaglerClientBrand(), initializer.getEaglerClientVersion(),
+							initializer.getMinecraftProtocol(), initializer.isAuthEnabled(),
+							initializer.getAuthUsername());
+				}
+				break;
+			default:
+				break;
 		}
 		if (handshaker == null) {
 			kickLegacy(ctx);

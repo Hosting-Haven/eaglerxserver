@@ -188,10 +188,10 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 		playerClazz = platform.getPlayerClass();
 		playerClassSet = Collections.singleton(playerClazz);
 		platformType = switch (platform.getType()) {
-		case BUNGEE -> EnumPlatformType.BUNGEECORD;
-		case BUKKIT -> EnumPlatformType.BUKKIT;
-		case VELOCITY -> EnumPlatformType.VELOCITY;
-		default -> EnumPlatformType.STANDALONE;
+			case BUNGEE -> EnumPlatformType.BUNGEECORD;
+			case BUKKIT -> EnumPlatformType.BUKKIT;
+			case VELOCITY -> EnumPlatformType.VELOCITY;
+			default -> EnumPlatformType.STANDALONE;
 		};
 
 		if (platformType != EnumPlatformType.BUKKIT) {

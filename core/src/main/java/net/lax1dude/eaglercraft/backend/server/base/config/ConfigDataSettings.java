@@ -114,20 +114,20 @@ public class ConfigDataSettings {
 
 		public boolean isEaglerHandshakeSupported(int vers) {
 			return switch (vers) {
-			case 1, 2 -> protocolLegacyAllowed;
-			case 3 -> protocolV3Allowed;
-			case 4 -> protocolV4Allowed;
-			case 5 -> protocolV5Allowed;
-			default -> false;
+				case 1, 2 -> protocolLegacyAllowed;
+				case 3 -> protocolV3Allowed;
+				case 4 -> protocolV4Allowed;
+				case 5 -> protocolV5Allowed;
+				default -> false;
 			};
 		}
 
 		public boolean isEaglerProtocolSupported(int vers) {
 			return switch (vers) {
-			case 3 -> protocolLegacyAllowed || protocolV3Allowed;
-			case 4 -> protocolV4Allowed;
-			case 5 -> protocolV5Allowed;
-			default -> false;
+				case 3 -> protocolLegacyAllowed || protocolV3Allowed;
+				case 4 -> protocolV4Allowed;
+				case 5 -> protocolV5Allowed;
+				default -> false;
 			};
 		}
 

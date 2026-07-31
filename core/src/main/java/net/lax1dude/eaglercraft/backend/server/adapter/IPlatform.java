@@ -45,7 +45,8 @@ public interface IPlatform<PlayerObject> {
 
 		void setConnectionInitializer(IEaglerXServerLoginInitializer<? extends IPipelineData> initializer);
 
-		void setPlayerInitializer(IEaglerXServerPlayerInitializer<? extends IPipelineData, ?, PlayerObject> initializer);
+		void setPlayerInitializer(
+				IEaglerXServerPlayerInitializer<? extends IPipelineData, ?, PlayerObject> initializer);
 
 		void setServerJoinListener(IEaglerXServerJoinListener<PlayerObject> listener);
 
