@@ -24,6 +24,7 @@ import java.net.SocketAddress;
 import java.util.Collection;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ForwardingMultimap;
@@ -326,44 +327,60 @@ public class VelocityUnsafe {
 	private static class VelocityBackendCompatHandler extends ChannelDuplexHandler {
 
 		private final IBackendProtocolResolver resolver;
+		private final Predicate<Player> eaglerPlayerFilter;
 		private final IPlatformLogger logger;
 		private final boolean debugConnections;
 
-		private VelocityBackendCompatHandler(IBackendProtocolResolver resolver, IPlatformLogger logger,
-				boolean debugConnections) {
+		private VelocityBackendCompatHandler(IBackendProtocolResolver resolver, Predicate<Player> eaglerPlayerFilter,
+				IPlatformLogger logger, boolean debugConnections) {
 			this.resolver = resolver;
+			this.eaglerPlayerFilter = eaglerPlayerFilter;
 			this.logger = logger;
 			this.debugConnections = debugConnections;
 		}
 
-		private void trace(String msg) {
-			if (debugConnections && logger != null) {
+		private void trace(Channel channel, String msg) throws ReflectiveOperationException {
+			if (debugConnections && logger != null && isEaglerBackendChannel(channel)) {
 				logger.info("[trace] " + msg);
 			}
 		}
 
+		private boolean isEaglerBackendChannel(Channel channel) throws ReflectiveOperationException {
+			MinecraftConnection mc = getBackendMinecraftConnection(channel);
+			if (mc == null) {
+				return false;
+			}
+			Object assoc = method_MinecraftConnection_getAssociation.invoke(mc);
+			return assoc instanceof VelocityServerConnection serverConn
+					&& eaglerPlayerFilter.test((Player) method_VelocityServerConnection_getPlayer.invoke(serverConn));
+		}
+
 		@Override
 		public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-			trace("backend read packet=" + msg.getClass().getName() + " channel=" + ctx.channel());
+			trace(ctx.channel(), "backend read packet=" + msg.getClass().getName() + " channel=" + ctx.channel());
 			super.channelRead(ctx, msg);
 		}
 
 		@Override
 		public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-			trace("backend write packet=" + msg.getClass().getName() + " channel=" + ctx.channel());
+			trace(ctx.channel(), "backend write packet=" + msg.getClass().getName() + " channel=" + ctx.channel());
 			if (isBackendHandshakeOrLoginPacket(msg)) {
 				MinecraftConnection mc = getBackendMinecraftConnection(ctx.channel());
 				if (mc != null) {
 					Object assoc = method_MinecraftConnection_getAssociation.invoke(mc);
 					if (assoc instanceof VelocityServerConnection serverConn) {
 						Player player = (Player) method_VelocityServerConnection_getPlayer.invoke(serverConn);
+						if (!eaglerPlayerFilter.test(player)) {
+							super.write(ctx, msg, promise);
+							return;
+						}
 						Object serverInfo = method_VelocityServerConnection_getServerInfo.invoke(serverConn);
 						String serverName = (String) serverInfo.getClass().getMethod("getName").invoke(serverInfo);
 						Integer override = resolver.getBackendProtocolOverride(player, serverName);
 						if (override != null) {
 							ProtocolVersion version = ProtocolVersion.getProtocolVersion(override.intValue());
 							if (version.isSupported()) {
-								trace("backend handshake override server=" + serverName + " protocol="
+								trace(ctx.channel(), "backend handshake override server=" + serverName + " protocol="
 										+ version.getProtocol()
 										+ " packet=" + msg.getClass().getName());
 								if (isVelocityClass(msg, "com.velocitypowered.proxy.protocol.packet.HandshakePacket")) {
@@ -446,7 +463,7 @@ public class VelocityUnsafe {
 
 	@SuppressWarnings("unchecked")
 	public static Runnable injectBackendChannelInitializer(ProxyServer server, IBackendProtocolResolver resolver,
-			boolean debugConnections, IPlatformLogger logger) {
+			Predicate<Player> eaglerPlayerFilter, boolean debugConnections, IPlatformLogger logger) {
 		try {
 			Object cm = field_VelocityServer_cm.get(server);
 			Object holder = method_ConnectionManager_getBackendChannelInitializer.invoke(cm);
@@ -461,10 +478,12 @@ public class VelocityUnsafe {
 				if (ch.pipeline().get(EAGLER_BACKEND_COMPAT) == null) {
 					if (ch.pipeline().get("handler") != null) {
 						ch.pipeline().addBefore("handler", EAGLER_BACKEND_COMPAT,
-								new VelocityBackendCompatHandler(resolver, logger, debugConnections));
+								new VelocityBackendCompatHandler(resolver, eaglerPlayerFilter, logger,
+										debugConnections));
 					} else {
 						ch.pipeline().addLast(EAGLER_BACKEND_COMPAT,
-								new VelocityBackendCompatHandler(resolver, logger, debugConnections));
+								new VelocityBackendCompatHandler(resolver, eaglerPlayerFilter, logger,
+										debugConnections));
 					}
 				}
 			});

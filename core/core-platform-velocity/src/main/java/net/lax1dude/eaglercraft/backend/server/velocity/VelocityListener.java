@@ -52,6 +52,7 @@ import net.lax1dude.eaglercraft.backend.server.adapter.IPipelineData;
 import net.lax1dude.eaglercraft.backend.server.adapter.IPlatformPlayer;
 import net.lax1dude.eaglercraft.backend.server.adapter.IPlatformServer;
 import net.lax1dude.eaglercraft.backend.server.adapter.PipelineAttributes;
+import net.lax1dude.eaglercraft.backend.server.base.BasePlayerInstance;
 import net.lax1dude.eaglercraft.backend.server.velocity.PlatformPluginVelocity.PluginMessageHandler;
 
 class VelocityListener {
@@ -136,25 +137,29 @@ class VelocityListener {
 	public void onServerPreConnected(ServerPreConnectEvent connectEvent) {
 		Player player = connectEvent.getPlayer();
 		UUID playerId = player.getUniqueId();
+		IPlatformPlayer<Player> platformPlayer = plugin.getPlayer(player);
+		boolean eaglerPlayer = isEaglerPlayer(platformPlayer);
 		boolean trace = plugin.isHeavyConnectionDebugEnabled();
-		if (trace) {
+		if (trace && eaglerPlayer) {
 			plugin.logger().info("[trace] pre-connect player=" + player.getUsername() + " target="
 					+ connectEvent.getOriginalServer().getServerInfo().getName() + " protocol="
 					+ player.getProtocolVersion().getProtocol() + " allowed=" + connectEvent.getResult().isAllowed());
 		}
 
 		if (bypassManagedPreConnect.remove(playerId)) {
-			if (trace) {
+			if (trace && eaglerPlayer) {
 				plugin.logger().info("[trace] pre-connect bypassed for " + player.getUsername());
 			}
 			return;
 		}
 
 		if (connectEvent.getResult().isAllowed()) {
-			IPlatformPlayer<Player> platformPlayer = plugin.getPlayer(player);
 			if (platformPlayer != null) {
 				((VelocityPlayer) platformPlayer).server = null;
 				plugin.handleServerPreConnect(platformPlayer);
+				if (!eaglerPlayer) {
+					return;
+				}
 
 				RegisteredServer target = connectEvent.getResult().getServer().orElse(connectEvent.getOriginalServer());
 				if (managedConnectInProgress.add(playerId)) {
@@ -173,18 +178,18 @@ class VelocityListener {
 
 	@Subscribe(priority = Short.MAX_VALUE, async = false)
 	public void onServerPostConnected(ServerPostConnectEvent connectEvent) {
-		UUID playerId = connectEvent.getPlayer().getUniqueId();
-		restoreManagedConnect(connectEvent.getPlayer());
-		if (plugin.isHeavyConnectionDebugEnabled()) {
-			plugin.logger().info("[trace] post-connect player=" + connectEvent.getPlayer().getUsername()
-					+ " currentServer=" + connectEvent.getPlayer().getCurrentServer().map((s) -> s.getServer()
+		Player player = connectEvent.getPlayer();
+		IPlatformPlayer<Player> platformPlayer = plugin.getPlayer(player);
+		restoreManagedConnect(player);
+		if (plugin.isHeavyConnectionDebugEnabled() && isEaglerPlayer(platformPlayer)) {
+			plugin.logger().info("[trace] post-connect player=" + player.getUsername()
+					+ " currentServer=" + player.getCurrentServer().map((s) -> s.getServer()
 							.getServerInfo().getName()).orElse("<none>"));
 		}
 
-		Optional<ServerConnection> serverCon = connectEvent.getPlayer().getCurrentServer();
+		Optional<ServerConnection> serverCon = player.getCurrentServer();
 		if (serverCon.isPresent()) {
 			RegisteredServer server = serverCon.get().getServer();
-			IPlatformPlayer<Player> platformPlayer = plugin.getPlayer(connectEvent.getPlayer());
 			if (platformPlayer != null) {
 				IPlatformServer<Player> platformServer = null;
 				platformServer = plugin.getRegisteredServers().get(server.getServerInfo().getName());
@@ -195,6 +200,18 @@ class VelocityListener {
 				plugin.handleServerPostConnect(platformPlayer, platformServer);
 			}
 		}
+	}
+
+	private static boolean isEaglerPlayer(IPlatformPlayer<Player> platformPlayer) {
+		if (platformPlayer == null) {
+			return false;
+		}
+		BasePlayerInstance<Player> attachment = platformPlayer.getPlayerAttachment();
+		return attachment != null && attachment.isEaglerPlayer();
+	}
+
+	boolean isEaglerPlayer(Player player) {
+		return isEaglerPlayer(plugin.getPlayer(player));
 	}
 
 	private static int[] buildProtocolAttemptPlan(int currentProtocol, Integer knownBackendProtocol) {
@@ -331,10 +348,10 @@ class VelocityListener {
 
 	private void restoreManagedConnect(Player player) {
 		UUID playerId = player.getUniqueId();
-		managedConnectInProgress.remove(playerId);
+		boolean wasManaged = managedConnectInProgress.remove(playerId);
 		bypassManagedPreConnect.remove(playerId);
 		backendProtocolOverrides.remove(playerId);
-		if (plugin.isHeavyConnectionDebugEnabled()) {
+		if (wasManaged && plugin.isHeavyConnectionDebugEnabled()) {
 			plugin.logger().info("[trace] cleared managed connect state for " + player.getUsername());
 		}
 	}

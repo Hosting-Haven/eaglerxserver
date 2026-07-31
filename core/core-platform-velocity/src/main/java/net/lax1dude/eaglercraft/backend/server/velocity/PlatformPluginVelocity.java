@@ -308,6 +308,7 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 				.toArray(new ChannelIdentifier[registeredChannelsMap.size()]);
 		proxy.getChannelRegistrar().register(registeredChannels);
 		VelocityUnsafe.injectBackendChannelInitializer(proxy, velocityListener::getBackendProtocolOverride,
+				velocityListener::isEaglerPlayer,
 				configRoot != null && configRoot.getSettings().isDebugLogBackendConnections(), loggerImpl);
 		VelocityUnsafe.injectChannelInitializer(proxy, listenersList, (listenerConf, channel) -> {
 			if (!channel.isActive()) {
