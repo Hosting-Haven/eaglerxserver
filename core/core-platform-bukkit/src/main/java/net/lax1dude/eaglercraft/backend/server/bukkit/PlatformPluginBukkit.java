@@ -91,6 +91,7 @@ import net.lax1dude.eaglercraft.backend.server.adapter.event.IEventDispatchAdapt
 import net.lax1dude.eaglercraft.backend.server.api.bukkit.EaglerXServerAPI;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServer;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServerVersion;
+import net.lax1dude.eaglercraft.backend.server.base.config.ConfigDataRoot;
 import net.lax1dude.eaglercraft.backend.server.bukkit.async.PlayerPostLoginInjector;
 import net.lax1dude.eaglercraft.backend.server.bukkit.async.PlayerPostLoginInjector.LoginEventContext;
 import net.lax1dude.eaglercraft.backend.server.bukkit.event.BukkitEventDispatchAdapter;
@@ -217,6 +218,10 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 			@Override
 			public void setCommandRegistry(Collection<IEaglerXServerCommandType<Player>> commands) {
 				commandsList = commands;
+			}
+
+			@Override
+			public void setConfig(ConfigDataRoot config) {
 			}
 
 			@Override

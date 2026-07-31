@@ -29,6 +29,7 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.EventLoopGroup;
 import net.lax1dude.eaglercraft.backend.server.adapter.event.IEventDispatchAdapter;
 import net.lax1dude.eaglercraft.backend.server.config.EnumConfigFormat;
+import net.lax1dude.eaglercraft.backend.server.base.config.ConfigDataRoot;
 
 public interface IPlatform<PlayerObject> {
 
@@ -49,6 +50,8 @@ public interface IPlatform<PlayerObject> {
 		void setServerJoinListener(IEaglerXServerJoinListener<PlayerObject> listener);
 
 		void setCommandRegistry(Collection<IEaglerXServerCommandType<PlayerObject>> commands);
+
+		void setConfig(ConfigDataRoot config);
 
 		IPlatform<PlayerObject> getPlatform();
 

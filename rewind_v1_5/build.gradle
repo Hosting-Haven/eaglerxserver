@@ -18,6 +18,12 @@ dependencies {
 	compileOnly(libs.bundles.netty.all)
 	compileOnly(libs.guava)
 	compileOnly(libs.slf4j)
+	testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.2"
+	testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.2"
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }
 
 tasks.named("shadowJar", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {

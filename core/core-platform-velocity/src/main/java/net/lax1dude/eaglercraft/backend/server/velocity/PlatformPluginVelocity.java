@@ -93,6 +93,7 @@ import net.lax1dude.eaglercraft.backend.server.adapter.event.IEventDispatchAdapt
 import net.lax1dude.eaglercraft.backend.server.api.velocity.EaglerXServerAPI;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServer;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServerVersion;
+import net.lax1dude.eaglercraft.backend.server.base.config.ConfigDataRoot;
 import net.lax1dude.eaglercraft.backend.server.config.EnumConfigFormat;
 import net.lax1dude.eaglercraft.backend.server.velocity.chat.VelocityComponentHelper;
 import net.lax1dude.eaglercraft.backend.server.velocity.event.VelocityEventDispatchAdapter;
@@ -135,6 +136,7 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 	protected Collection<IEaglerXServerListener> listenersList;
 	protected Collection<IEaglerXServerMessageChannel<Player>> playerChannelsList;
 	protected Collection<IEaglerXServerMessageChannel<Player>> backendChannelsList;
+	protected ConfigDataRoot configRoot;
 	protected IPlatformScheduler schedulerImpl;
 	protected IPlatformComponentHelper componentHelperImpl;
 	protected CommandSource cacheConsoleCommandSenderInstance;
@@ -236,6 +238,11 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 			}
 
 			@Override
+			public void setConfig(ConfigDataRoot config) {
+				configRoot = config;
+			}
+
+			@Override
 			public IPlatform<Player> getPlatform() {
 				return PlatformPluginVelocity.this;
 			}
@@ -285,7 +292,8 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 			return;
 		}
 		aborted = true; // Will set to false if onProxyInit completes normally
-		proxy.getEventManager().register(this, new VelocityListener(this));
+		VelocityListener velocityListener = new VelocityListener(this);
+		proxy.getEventManager().register(this, velocityListener);
 		registeredCommandsList.clear();
 		for (IEaglerXServerCommandType<Player> cmd : commandsList) {
 			registeredCommandsList.add((new VelocityCommand(this, cmd)).register());
@@ -305,6 +313,8 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 		registeredChannels = registeredChannelsMap.keySet()
 				.toArray(new ChannelIdentifier[registeredChannelsMap.size()]);
 		proxy.getChannelRegistrar().register(registeredChannels);
+		VelocityUnsafe.injectBackendChannelInitializer(proxy, velocityListener::getBackendProtocolOverride,
+				configRoot != null && configRoot.getSettings().isDebugLogBackendConnections(), loggerImpl);
 		VelocityUnsafe.injectChannelInitializer(proxy, listenersList, (listenerConf, channel) -> {
 			if (!channel.isActive()) {
 				return;
@@ -393,6 +403,10 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 			}
 		}
 		aborted = false;
+	}
+
+	boolean isHeavyConnectionDebugEnabled() {
+		return configRoot != null && configRoot.getSettings().isDebugLogBackendConnections();
 	}
 
 	@Subscribe(priority = Short.MIN_VALUE)

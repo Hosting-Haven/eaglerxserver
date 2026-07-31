@@ -72,6 +72,7 @@ public class ConfigDataListener {
 	private final boolean spoofPlayerAddressForwarded;
 	private final boolean dualStackHAProxyDetection;
 	private final boolean forceDisableHAProxy;
+	private final int backendMinecraftProtocolOverride;
 	private final boolean enableTLS;
 	private final boolean requireTLS;
 	private final boolean tlsManagedByExternalPlugin;
@@ -103,6 +104,7 @@ public class ConfigDataListener {
 			boolean dualStack, boolean forwardIp, String forwardIPHeader, boolean forwardSecret,
 			String forwardSecretHeader, String forwardSecretFile, String forwardSecretValue,
 			boolean spoofPlayerAddressForwarded, boolean dualStackHAProxyDetection, boolean forceDisableHAProxy,
+			int backendMinecraftProtocolOverride,
 			boolean enableTLS, boolean requireTLS, boolean tlsManagedByExternalPlugin, String tlsPublicChainFile,
 			String tlsPrivateKeyFile, String tlsPrivateKeyPassword, boolean tlsAutoRefreshCert,
 			String redirectLegacyClientsTo, String serverIcon, List<String> serverMOTD, boolean allowMOTD,
@@ -123,6 +125,7 @@ public class ConfigDataListener {
 		this.spoofPlayerAddressForwarded = spoofPlayerAddressForwarded;
 		this.dualStackHAProxyDetection = dualStackHAProxyDetection;
 		this.forceDisableHAProxy = forceDisableHAProxy;
+		this.backendMinecraftProtocolOverride = backendMinecraftProtocolOverride;
 		this.enableTLS = enableTLS;
 		this.requireTLS = requireTLS;
 		this.tlsManagedByExternalPlugin = tlsManagedByExternalPlugin;
@@ -197,6 +200,10 @@ public class ConfigDataListener {
 
 	public boolean isForceDisableHAProxy() {
 		return forceDisableHAProxy;
+	}
+
+	public int getBackendMinecraftProtocolOverride() {
+		return backendMinecraftProtocolOverride;
 	}
 
 	public boolean isEnableTLS() {

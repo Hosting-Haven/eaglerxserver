@@ -218,6 +218,7 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 		} catch (IOException e) {
 			throw new AbortLoadException("Could not read one or more config files!", e);
 		}
+		init.setConfig(config);
 
 		logger().info("Server Name: \"" + config.getSettings().getServerName() + "\"");
 

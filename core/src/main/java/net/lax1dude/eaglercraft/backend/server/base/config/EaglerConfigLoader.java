@@ -227,6 +227,12 @@ public class EaglerConfigLoader {
 				"Default value is false, if the server should log client brand information to the "
 				+ "console. Can be nice for keeping track of what clients your players are using."
 			);
+			boolean debugLogBackendConnections = config.getBoolean(
+				"debug_log_backend_connections", false,
+				"Default value is false, if the server should log very verbose backend connection and "
+				+ "packet tracing for proxy-side backend handshakes, join packets, and retry attempts. "
+				+ "Use this only when diagnosing hard connection failures because it is intentionally noisy."
+			);
 			IEaglerConfSection protocols = config.getSection("protocols");
 			if (!protocols.exists()) {
 				protocols.setComment("Sets the protocol versions Eaglercraft players should be allowed "
@@ -517,7 +523,7 @@ public class EaglerConfigLoader {
 					eaglerPlayersViewDistance, eaglerPlayersVanillaSkin, enableIsEaglerPlayerProperty,
 					protocolV4DefragSendDelay, protocolV4DefragMaxPackets, brandLookupRatelimit,
 					webviewDownloadRatelimit, webviewMessageRatelimit, debugLogNewChannels, debugLogRealIPHeaders,
-					debugLogOriginHeaders, debugLogClientBrands,
+				debugLogOriginHeaders, debugLogClientBrands, debugLogBackendConnections,
 					new ConfigDataSettings.ConfigDataProtocols(minMinecraftProtocol, maxMinecraftProtocol,
 							maxMinecraftProtocolV5, eaglerXRewindAllowed, protocolLegacyAllowed, protocolV3Allowed,
 							protocolV4Allowed, protocolV5Allowed),
@@ -951,6 +957,16 @@ public class EaglerConfigLoader {
 			+ "underlying server does not allow disabling HAProxy on a per-listener "
 			+ "basis (like Velocity)."
 		) : false;
+		int backendMinecraftProtocolOverride = listener.getInteger(
+			"backend_minecraft_protocol_override", -1,
+			"Default value is -1, sets a fixed Minecraft protocol version to advertise "
+			+ "to the backend login pipeline for this listener (-1 = use each player's "
+			+ "actual protocol). Set this if some backend servers do not run Via plugins "
+			+ "and kick with outdated/newer protocol messages."
+		);
+		if (backendMinecraftProtocolOverride < -1) {
+			backendMinecraftProtocolOverride = -1;
+		}
 		IEaglerConfSection tlsConfigSection = listener.getSection("tls_config");
 		if (!tlsConfigSection.exists()) {
 			tlsConfigSection.setComment("Settings for HTTPS (WSS) connections, HTTPS is normally "
@@ -1092,7 +1108,8 @@ public class EaglerConfigLoader {
 						+ "ratelimits will be applied based on the forwarded address instead of the raw socket address."));
 		return new ConfigDataListener(name, injectAddress, cloneListenerEnabled, dualStack, forwardIp, forwardIPHeader,
 				forwardSecret, forwardSecretHeader, forwardSecretFile, forwardSecretValue, spoofPlayerAddressForwarded,
-				dualStackHAProxyDetection, forceDisableHAProxy, enableTLS, requireTLS, tlsManagedByExternalPlugin,
+				dualStackHAProxyDetection, forceDisableHAProxy, backendMinecraftProtocolOverride,
+				enableTLS, requireTLS, tlsManagedByExternalPlugin,
 				tlsPublicChainFile, tlsPrivateKeyFile, tlsPrivateKeyPassword, tlsAutoRefreshCert,
 				redirectLegacyClientsTo, serverIcon, serverMOTD, allowMOTD, allowQuery, showMOTDPlayerList,
 				allowCookieRevokeQuery, motdCacheTTL, motdCacheAnimation, motdCacheResults, motdCacheTrending,

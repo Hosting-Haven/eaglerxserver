@@ -445,6 +445,7 @@ public class ConfigDataSettings {
 	private final boolean debugLogRealIPHeaders;
 	private final boolean debugLogOriginHeaders;
 	private final boolean debugLogClientBrands;
+	private final boolean debugLogBackendConnections;
 	private final ConfigDataProtocols protocols;
 	private final ConfigDataSkinService skinService;
 	private final ConfigDataVoiceService voiceService;
@@ -459,7 +460,8 @@ public class ConfigDataSettings {
 			boolean enableIsEaglerPlayerPropery, int protocolV4DefragSendDelay, int protocolV4DefragMaxPackets,
 			int brandLookupRatelimit, int webviewDownloadRatelimit, int webviewMessageRatelimit,
 			boolean debugLogNewChannels, boolean debugLogRealIPHeaders, boolean debugLogOriginHeaders,
-			boolean debugLogClientBrands, ConfigDataProtocols protocols, ConfigDataSkinService skinService,
+			boolean debugLogClientBrands, boolean debugLogBackendConnections, ConfigDataProtocols protocols,
+			ConfigDataSkinService skinService,
 			ConfigDataVoiceService voiceService, ConfigDataUpdateService updateService,
 			ConfigDataUpdateChecker updateChecker) {
 		this.serverName = serverName;
@@ -490,6 +492,7 @@ public class ConfigDataSettings {
 		this.debugLogRealIPHeaders = debugLogRealIPHeaders;
 		this.debugLogOriginHeaders = debugLogOriginHeaders;
 		this.debugLogClientBrands = debugLogClientBrands;
+		this.debugLogBackendConnections = debugLogBackendConnections;
 		this.protocols = protocols;
 		this.skinService = skinService;
 		this.voiceService = voiceService;
@@ -607,6 +610,10 @@ public class ConfigDataSettings {
 
 	public boolean isDebugLogClientBrands() {
 		return debugLogClientBrands;
+	}
+
+	public boolean isDebugLogBackendConnections() {
+		return debugLogBackendConnections;
 	}
 
 	public ConfigDataProtocols getProtocols() {

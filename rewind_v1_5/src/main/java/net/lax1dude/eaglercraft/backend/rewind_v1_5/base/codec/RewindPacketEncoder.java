@@ -17,6 +17,8 @@
 package net.lax1dude.eaglercraft.backend.rewind_v1_5.base.codec;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -33,6 +35,16 @@ import net.lax1dude.eaglercraft.backend.server.api.collect.ObjectObjectMap;
 public class RewindPacketEncoder<PlayerObject> extends RewindChannelHandler.Encoder<PlayerObject> {
 
 	public static final boolean OLD_CHUNK_FORMAT = Boolean.getBoolean("eaglerxrewind.oldChunkFormat");
+	public static final boolean STRICT_USERNAME_MODE = Boolean
+			.parseBoolean(System.getProperty("eaglerxrewind.strictUsername", "true"));
+	public static final boolean DEBUG_CHAT_NORMALIZATION = Boolean.getBoolean("eaglerxrewind.debugChatNormalization");
+	public static final int DEBUG_CHAT_DUMP_LIMIT = Math.max(64,
+			Integer.getInteger("eaglerxrewind.debugChatDumpLimit", Integer.valueOf(160)).intValue());
+	public static final long STRICT_USERNAME_LOG_RATE_LIMIT_MS =
+			Long.getLong("eaglerxrewind.strictUsernameLogRateLimitMs", Long.valueOf(30_000L));
+
+	private static final AtomicLong INVALID_CHAT_DROP_COUNT = new AtomicLong(0L);
+	private static final Map<String, Long> LAST_INVALID_LOG_BY_KEY = new HashMap<>();
 
 	private final HPPC hppc;
 	private final ObjectObjectMap<String, ObjectIntMap<String>> scoreBoard;
@@ -126,15 +138,131 @@ public class RewindPacketEncoder<PlayerObject> extends RewindChannelHandler.Enco
 		bb.writeByte(maxPlayers);
 	}
 
-	private void handleChatMessage(ByteBuf in, ByteBuf bb) {
+	private boolean handleChatMessage(ByteBuf in, ByteBuf bb) {
+		String raw = BufferUtils.readMCString(in, 32767);
+		RewindChatTextNormalizer.NormalizationResult result = normalizeChatForEncode(raw,
+				(msg) -> componentHelper().convertJSONToLegacySection(msg),
+				(msg) -> componentHelper().convertJSONToPlainText(msg));
+		String convertedLegacy = convertJSONToLegacySection(raw,
+				(msg) -> componentHelper().convertJSONToLegacySection(msg));
+		String convertedPlain = convertJSONToPlainText(raw, (msg) -> componentHelper().convertJSONToPlainText(msg));
+		if (result.dropped) {
+			long count = INVALID_CHAT_DROP_COUNT.get();
+			logStrictInvalid("chat", "play:chat", result.translationKey, result.reason, raw, convertedLegacy,
+					convertedPlain, count);
+			return false;
+		}
 		bb.writeByte(0x03);
-		String msg = BufferUtils.readMCString(in, 32767);
+		String normalized = result.normalizedText;
+		logNormalization("chat", "play:chat", convertedLegacy, normalized);
+		if (DEBUG_CHAT_NORMALIZATION && convertedPlain != null
+				&& RewindChatTextNormalizer.hasUnresolvedTokens(convertedLegacy)) {
+			logger().info("[chat-normalization] type=chat channel=play:chat plain=\""
+					+ RewindChatTextNormalizer.previewForLog(convertedPlain, DEBUG_CHAT_DUMP_LIMIT) + "\"");
+		}
+		BufferUtils.writeLegacyMCString(bb, normalized, 32767);
+		return true;
+	}
+
+	static RewindChatTextNormalizer.NormalizationResult normalizeChatForEncode(String raw,
+			Function<String, String> jsonToLegacyConverter,
+			Function<String, String> jsonToPlainConverter) {
+		String convertedLegacy = convertJSONToLegacySection(raw, jsonToLegacyConverter);
+		RewindChatTextNormalizer.NormalizationResult result;
+		if (STRICT_USERNAME_MODE) {
+			String convertedPlain = convertJSONToPlainText(raw, jsonToPlainConverter);
+			result = RewindChatTextNormalizer.normalizeChatStrict(raw, convertedLegacy, convertedPlain);
+			if (result.dropped) {
+				INVALID_CHAT_DROP_COUNT.incrementAndGet();
+			}
+		} else {
+			result = RewindChatTextNormalizer.NormalizationResult.emit(
+					RewindChatTextNormalizer.normalize(convertedLegacy), "none");
+		}
+		return result;
+	}
+
+	static String convertJSONToLegacySection(String raw,
+			Function<String, String> jsonToLegacyConverter) {
+		String msg = raw;
 		try {
-			msg = componentHelper().convertJSONToLegacySection(msg);
+			msg = jsonToLegacyConverter.apply(raw);
 		} catch (IllegalArgumentException ignored) {
 			//
 		}
-		BufferUtils.writeLegacyMCString(bb, msg, 32767);
+		return msg;
+	}
+
+	static String convertAndNormalizeLegacyText(String raw,
+			Function<String, String> jsonToLegacyConverter) {
+		return convertAndNormalizeLegacyText(raw, jsonToLegacyConverter, (msg) -> msg);
+	}
+
+	static String convertJSONToPlainText(String raw,
+			Function<String, String> jsonToPlainConverter) {
+		String msg = raw;
+		try {
+			msg = jsonToPlainConverter.apply(raw);
+		} catch (IllegalArgumentException ignored) {
+			//
+		}
+		return msg;
+	}
+
+	static String convertAndNormalizeLegacyText(String raw,
+			Function<String, String> jsonToLegacyConverter,
+			Function<String, String> jsonToPlainConverter) {
+		String legacy = convertJSONToLegacySection(raw, jsonToLegacyConverter);
+		if (RewindChatTextNormalizer.hasUnresolvedTokens(legacy)) {
+			String plain = convertJSONToPlainText(raw, jsonToPlainConverter);
+			if (plain != null && !plain.isEmpty()) {
+				legacy = plain;
+			}
+		}
+		return RewindChatTextNormalizer.normalize(legacy);
+	}
+
+	private void logNormalization(String messageType, String channel, String preNormalize, String postNormalize) {
+		if (!DEBUG_CHAT_NORMALIZATION) {
+			return;
+		}
+		logger().info("[chat-normalization] type=" + messageType + " channel=" + channel + " pre=\""
+				+ RewindChatTextNormalizer.previewForLog(preNormalize, DEBUG_CHAT_DUMP_LIMIT) + "\"");
+		logger().info("[chat-normalization] type=" + messageType + " channel=" + channel + " post=\""
+				+ RewindChatTextNormalizer.previewForLog(postNormalize, DEBUG_CHAT_DUMP_LIMIT) + "\"");
+	}
+
+	private void logStrictInvalid(String messageType, String channel, String translationKey, String reason,
+			String raw, String legacy, String plain, long count) {
+		String key = translationKey != null ? translationKey : "none";
+		long now = System.currentTimeMillis();
+		boolean logNow;
+		synchronized (LAST_INVALID_LOG_BY_KEY) {
+			Long last = LAST_INVALID_LOG_BY_KEY.get(key);
+			logNow = last == null || now - last.longValue() >= STRICT_USERNAME_LOG_RATE_LIMIT_MS;
+			if (logNow) {
+				LAST_INVALID_LOG_BY_KEY.put(key, now);
+			}
+		}
+		if (!logNow) {
+			return;
+		}
+		logger().error("[chat-strict-invalid] type=" + messageType + " channel=" + channel + " key=" + key
+				+ " reason=" + reason + " droppedCount=" + count + " raw=\""
+				+ RewindChatTextNormalizer.previewForLog(raw, DEBUG_CHAT_DUMP_LIMIT) + "\" legacy=\""
+				+ RewindChatTextNormalizer.previewForLog(legacy, DEBUG_CHAT_DUMP_LIMIT) + "\" plain=\""
+				+ RewindChatTextNormalizer.previewForLog(plain, DEBUG_CHAT_DUMP_LIMIT) + "\"");
+	}
+
+	static long getInvalidChatDropCount() {
+		return INVALID_CHAT_DROP_COUNT.get();
+	}
+
+	static void resetInvalidChatDropCountForTests() {
+		INVALID_CHAT_DROP_COUNT.set(0L);
+		synchronized (LAST_INVALID_LOG_BY_KEY) {
+			LAST_INVALID_LOG_BY_KEY.clear();
+		}
 	}
 
 	private void handleTimeUpdate(ByteBuf in, ByteBuf bb) {
@@ -1558,13 +1686,14 @@ public class RewindPacketEncoder<PlayerObject> extends RewindChannelHandler.Enco
 
 	private void handleDisconnect(ByteBuf in, ByteBuf bb) {
 		bb.writeByte(0xFF);
-		String msg = BufferUtils.readMCString(in, 32767);
-		try {
-			msg = componentHelper().convertJSONToLegacySection(msg);
-		} catch (IllegalArgumentException ignored) {
-			//
-		}
-		BufferUtils.writeLegacyMCString(bb, msg, 32767);
+		String raw = BufferUtils.readMCString(in, 32767);
+		String convertedLegacy = convertJSONToLegacySection(raw,
+				(msg) -> componentHelper().convertJSONToLegacySection(msg));
+		String normalized = convertAndNormalizeLegacyText(raw,
+				(msg) -> componentHelper().convertJSONToLegacySection(msg),
+				(msg) -> componentHelper().convertJSONToPlainText(msg));
+		logNormalization("disconnect", "play:disconnect", convertedLegacy, normalized);
+		BufferUtils.writeLegacyMCString(bb, normalized, 32767);
 	}
 
 	@Override
@@ -1583,7 +1712,10 @@ public class RewindPacketEncoder<PlayerObject> extends RewindChannelHandler.Enco
 				break;
 			case 0x02:
 				bb = ctx.alloc().buffer();
-				handleChatMessage(in, bb);
+				if (!handleChatMessage(in, bb)) {
+					bb.release();
+					bb = null;
+				}
 				break;
 			case 0x03:
 				bb = ctx.alloc().buffer();

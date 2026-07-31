@@ -72,6 +72,7 @@ import net.lax1dude.eaglercraft.backend.server.adapter.event.IEventDispatchAdapt
 import net.lax1dude.eaglercraft.backend.server.api.bungee.EaglerXServerAPI;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServer;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServerVersion;
+import net.lax1dude.eaglercraft.backend.server.base.config.ConfigDataRoot;
 import net.lax1dude.eaglercraft.backend.server.bungee.chat.BungeeComponentHelper;
 import net.lax1dude.eaglercraft.backend.server.bungee.event.BungeeEventDispatchAdapter;
 import net.lax1dude.eaglercraft.backend.server.config.EnumConfigFormat;
@@ -207,6 +208,10 @@ public class PlatformPluginBungee extends Plugin implements IPlatform<ProxiedPla
 			@Override
 			public void setCommandRegistry(Collection<IEaglerXServerCommandType<ProxiedPlayer>> commands) {
 				commandsList = commands;
+			}
+
+			@Override
+			public void setConfig(ConfigDataRoot config) {
 			}
 
 			@Override
