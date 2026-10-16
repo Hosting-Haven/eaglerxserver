@@ -163,10 +163,10 @@ Generated from the source code of EaglerXServer 1.1.0
 
 ## <small>`/settings.cfg` &gt; `protocols` : `max_minecraft_protocol`&emsp;<sub>(Bukkit, BungeeCord, Velocity)</sub></small>
 **Summary:**
-- Default value is 340, sets the maximum Minecraft protocol version that EaglercraftX-based clients are allowed to connect with (340 = 1.12.2)&emsp;<sub>(Bukkit, BungeeCord, Velocity)</sub>
+- Default value is -1, sets the maximum Minecraft protocol version that EaglercraftX-based clients are allowed to connect with (-1 = any Minecraft protocol version, the server will negotiate entry for clients on any release)&emsp;<sub>(Bukkit, BungeeCord, Velocity)</sub>
 
 **Defaults:**
-- `340`&emsp;<sub>(Bukkit, BungeeCord, Velocity)</sub>
+- `-1`&emsp;<sub>(Bukkit, BungeeCord, Velocity)</sub>
 
 ## <small>`/settings.cfg` &gt; `protocols` : `max_minecraft_protocol_v5`&emsp;<sub>(Bukkit, BungeeCord, Velocity)</sub></small>
 **Summary:**

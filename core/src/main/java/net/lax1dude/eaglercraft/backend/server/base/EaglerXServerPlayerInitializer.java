@@ -138,12 +138,27 @@ class EaglerXServerPlayerInitializer<PlayerObject> implements
 			try {
 				if (instance.isEaglerPlayer()) {
 					EaglerPlayerInstance<PlayerObject> eaglerInstance = (EaglerPlayerInstance<PlayerObject>) instance;
-					try {
-						server.unregisterEaglerPlayer(eaglerInstance);
-					} catch (EaglerXServer.RegistrationStateException ex) {
-						return;
+					int gracePeriod = server.getConfig().getSettings().getConnectionGracePeriod();
+					if (gracePeriod > 0) {
+						// Hold the session state for a short grace period instead of instantly
+						// tearing it down, so a briefly flickering client can reconnect and
+						// re-bind without losing its backend session.
+						server.getPlatform().getScheduler().executeAsyncDelayedTask(() -> {
+							try {
+								server.unregisterEaglerPlayer(eaglerInstance);
+							} catch (EaglerXServer.RegistrationStateException ex) {
+								return;
+							}
+							server.eventDispatcher().dispatchDestroyPlayerEvent(eaglerInstance, null);
+						}, gracePeriod);
+					} else {
+						try {
+							server.unregisterEaglerPlayer(eaglerInstance);
+						} catch (EaglerXServer.RegistrationStateException ex) {
+							return;
+						}
+						server.eventDispatcher().dispatchDestroyPlayerEvent(eaglerInstance, null);
 					}
-					server.eventDispatcher().dispatchDestroyPlayerEvent(eaglerInstance, null);
 				} else {
 					try {
 						server.unregisterPlayer(instance);

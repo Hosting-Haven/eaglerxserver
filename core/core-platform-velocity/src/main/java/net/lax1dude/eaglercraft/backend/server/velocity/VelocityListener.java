@@ -53,6 +53,7 @@ import net.lax1dude.eaglercraft.backend.server.adapter.IPlatformPlayer;
 import net.lax1dude.eaglercraft.backend.server.adapter.IPlatformServer;
 import net.lax1dude.eaglercraft.backend.server.adapter.PipelineAttributes;
 import net.lax1dude.eaglercraft.backend.server.base.BasePlayerInstance;
+import net.lax1dude.eaglercraft.backend.server.base.ProtocolLadder;
 import net.lax1dude.eaglercraft.backend.server.velocity.PlatformPluginVelocity.PluginMessageHandler;
 
 class VelocityListener {
@@ -220,6 +221,16 @@ class VelocityListener {
 			plan.add(knownBackendProtocol);
 		}
 		plan.add(Integer.valueOf(currentProtocol));
+		// Dynamically pick the nearest lower release protocol so a client one release
+		// ahead of the backend can downgrade gracefully instead of dropping all the
+		// way to 1.16.5 and losing modern blocks.
+		int[] ladder = ProtocolLadder.buildForConnection(currentProtocol);
+		for (int i = ladder.length - 1; i >= 0; --i) {
+			if (ladder[i] < currentProtocol) {
+				plan.add(Integer.valueOf(ladder[i]));
+				break;
+			}
+		}
 		for (int protocol : RETRY_PROTOCOLS) {
 			plan.add(Integer.valueOf(protocol));
 		}

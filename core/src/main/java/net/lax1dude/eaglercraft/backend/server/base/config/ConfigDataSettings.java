@@ -421,6 +421,7 @@ public class ConfigDataSettings {
 	private final UUID serverUUID;
 	private final String serverUUIDString;
 	private final int eaglerLoginTimeout;
+	private final int connectionGracePeriod;
 	private final int httpMaxInitialLineLength;
 	private final int httpMaxHeaderSize;
 	private final int httpMaxChunkSize;
@@ -452,7 +453,8 @@ public class ConfigDataSettings {
 	private final ConfigDataUpdateService updateService;
 	private final ConfigDataUpdateChecker updateChecker;
 
-	public ConfigDataSettings(String serverName, UUID serverUUID, int eaglerLoginTimeout, int httpMaxInitialLineLength,
+	public ConfigDataSettings(String serverName, UUID serverUUID, int eaglerLoginTimeout, int connectionGracePeriod,
+			int httpMaxInitialLineLength,
 			int httpMaxHeaderSize, int httpMaxChunkSize, int httpMaxContentLength, int httpWebSocketCompressionLevel,
 			int httpWebSocketFragmentSize, int httpWebSocketMaxFrameLength, boolean httpWebSocketPingIntervention,
 			int tlsCertRefreshRate, boolean enableAuthenticationEvents, boolean enableBackendRPCAPI,
@@ -468,6 +470,7 @@ public class ConfigDataSettings {
 		this.serverUUID = serverUUID;
 		this.serverUUIDString = serverUUID.toString();
 		this.eaglerLoginTimeout = eaglerLoginTimeout;
+		this.connectionGracePeriod = connectionGracePeriod;
 		this.httpMaxInitialLineLength = httpMaxInitialLineLength;
 		this.httpMaxHeaderSize = httpMaxHeaderSize;
 		this.httpMaxChunkSize = httpMaxChunkSize;
@@ -514,6 +517,10 @@ public class ConfigDataSettings {
 
 	public int getEaglerLoginTimeout() {
 		return eaglerLoginTimeout;
+	}
+
+	public int getConnectionGracePeriod() {
+		return connectionGracePeriod;
 	}
 
 	public int getHTTPMaxInitialLineLength() {

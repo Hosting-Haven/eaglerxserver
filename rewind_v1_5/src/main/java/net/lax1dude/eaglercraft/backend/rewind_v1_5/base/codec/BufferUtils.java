@@ -783,13 +783,22 @@ public class BufferUtils {
 		case 159:
 			return 82;
 		case 170:
-			return 1;
+			// hay block (1.6) has no 1.5.2 equivalent, fall back to sandstone
+			return 24;
 		case 171:
-			return 70;
+			// carpet (1.6) is wool based, preserve the color metadata via wool
+			return 35;
 		case 172:
 			return 82;
 		case 173:
-			return 1;
+			// coal block (1.6) has no 1.5.2 equivalent, fall back to obsidian
+			return 49;
+		}
+		if (type < 0 || type > 158) {
+			// Any unmapped/out-of-range block ID must never fall through to the client
+			// as-is, because the 1.5.2 client renders unknown IDs as stone (ID 1).
+			// Use a safe, always-available block instead.
+			return 5;
 		}
 		return type;
 	}

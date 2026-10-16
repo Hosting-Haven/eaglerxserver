@@ -35,6 +35,7 @@ import net.lax1dude.eaglercraft.backend.server.api.EnumPipelineEvent;
 import net.lax1dude.eaglercraft.backend.server.api.rewind.IEaglerXRewindProtocol;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServer;
 import net.lax1dude.eaglercraft.backend.server.base.NettyPipelineData;
+import net.lax1dude.eaglercraft.backend.server.base.ProtocolLadder;
 import net.lax1dude.eaglercraft.backend.server.base.RewindInitializer;
 import net.lax1dude.eaglercraft.backend.server.base.config.ConfigDataSettings.ConfigDataProtocols;
 import net.lax1dude.eaglercraft.backend.server.base.handshake.HandshakePacketTypes;
@@ -59,6 +60,15 @@ public class WebSocketEaglerInitialHandler extends MessageToMessageCodec<ByteBuf
 		void finish(ChannelHandlerContext ctx);
 
 	}
+
+	/**
+	 * Maximum gap (in Minecraft protocol versions) between the client's supported
+	 * protocol range and the server's configured range for which an adjacent client
+	 * is allowed to negotiate entry by clamping to the nearest supported protocol
+	 * instead of being rejected outright. This is roughly one major Minecraft
+	 * release worth of protocol versions.
+	 */
+	private static final int ADJACENT_PROTOCOL_TOLERANCE = 64;
 
 	private static final byte[] LEGACY_KICK;
 	private static final byte[] LEGACY_REDIRECT;
@@ -283,10 +293,21 @@ public class WebSocketEaglerInitialHandler extends MessageToMessageCodec<ByteBuf
 			return;
 		}
 
+		ProtocolLadder.notifyHighestSeen(maxClientMC);
+
 		int selectedHandshakeProtocol = -1;
 		boolean versionMismatch = maxAvailableMC == Integer.MIN_VALUE;
 		boolean isServerProbablyOutdated = false;
 		boolean isClientProbablyOutdated = false;
+		if (versionMismatch) {
+			// Allow clients on adjacent protocol versions to negotiate entry by clamping
+			// to the nearest supported protocol instead of immediately rejecting them.
+			int adjacentMC = selectAdjacentMinecraftProtocol(minClientMC, maxClientMC, minAllowedMC, maxAllowedMC);
+			if (adjacentMC != -1) {
+				maxAvailableMC = adjacentMC;
+				versionMismatch = false;
+			}
+		}
 		if (!versionMismatch) {
 			if (v5InList && protocols.isProtocolV5Allowed()) {
 				selectedHandshakeProtocol = 5;
@@ -390,6 +411,19 @@ public class WebSocketEaglerInitialHandler extends MessageToMessageCodec<ByteBuf
 			ctx.close();
 			return;
 		}
+	}
+
+	private static int selectAdjacentMinecraftProtocol(int minClientMC, int maxClientMC, int minAllowedMC,
+			int maxAllowedMC) {
+		// Client only supports protocols below the server's minimum
+		if (maxClientMC < minAllowedMC) {
+			return (minAllowedMC - maxClientMC) <= ADJACENT_PROTOCOL_TOLERANCE ? minAllowedMC : -1;
+		}
+		// Client only supports protocols above the server's maximum
+		if (minClientMC > maxAllowedMC) {
+			return (minClientMC - maxAllowedMC) <= ADJACENT_PROTOCOL_TOLERANCE ? maxAllowedMC : -1;
+		}
+		return -1;
 	}
 
 	private void handleEaglerLegacyConnection(ChannelHandlerContext ctx, ByteBuf binaryMsg) {

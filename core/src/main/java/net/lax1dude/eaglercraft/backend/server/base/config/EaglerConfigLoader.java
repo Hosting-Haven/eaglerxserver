@@ -79,6 +79,12 @@ public class EaglerConfigLoader {
 							+ "can stay in the login phase before being disconnected, this is necessary "
 							+ "because WebSocket ping frames could be used to keep a connection from timing "
 							+ "out forever without ever having to advance it to the next state");
+			int connectionGracePeriod = config.getInteger(
+					"connection_grace_period", 0,
+					"Default value is 0 (disabled), sets how long in milliseconds to hold a player's "
+							+ "session state after their WebSocket connection drops unexpectedly before "
+							+ "tearing it down. This gives briefly flickering clients a window to "
+							+ "reconnect without losing their session, e.g. 8000 for 8 seconds.");
 			int httpMaxInitialLineLength = config.getInteger(
 					"http_max_initial_line_length", 4096,
 					"Default value is 4096, sets the maximum length for the initial request line");
@@ -215,9 +221,11 @@ public class EaglerConfigLoader {
 					"Default value is 3, sets the minimum Minecraft protocol version that "
 							+ "EaglercraftX-based clients are allowed to connect with (3 = 1.7)");
 			int maxMinecraftProtocol = protocols.getInteger(
-					"max_minecraft_protocol", 340,
-					"Default value is 340, sets the maximum Minecraft protocol version that "
-							+ "EaglercraftX-based clients are allowed to connect with (340 = 1.12.2)");
+					"max_minecraft_protocol", -1,
+					"Default value is -1, sets the maximum Minecraft protocol version that "
+							+ "EaglercraftX-based clients are allowed to connect with (-1 = any "
+							+ "Minecraft protocol version, the server will negotiate entry for "
+							+ "clients on any release)");
 			int maxMinecraftProtocolV5 = protocols.getInteger(
 					"max_minecraft_protocol_v5", -1,
 					"Default value is -1, sets the maximum Minecraft protocol version that "
@@ -451,7 +459,8 @@ public class EaglerConfigLoader {
 					"Default value is true, if the server should print reminders in the chat "
 							+ "when a new plugin update is available.")
 					: false;
-			return new ConfigDataSettings(serverName, serverUUID, eaglerLoginTimeout, httpMaxInitialLineLength,
+			return new ConfigDataSettings(serverName, serverUUID, eaglerLoginTimeout, connectionGracePeriod,
+					httpMaxInitialLineLength,
 					httpMaxHeaderSize, httpMaxChunkSize, httpMaxContentLength, httpWebSocketCompressionLevel,
 					httpWebSocketFragmentSize, httpWebSocketMaxFrameLength, httpWebSocketPingIntervention,
 					tlsCertRefreshRate, enableAuthenticationEvents, enableBackendRPCAPI, useModernizedChannelNames,

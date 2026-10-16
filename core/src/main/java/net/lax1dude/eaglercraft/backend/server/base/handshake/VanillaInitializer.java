@@ -25,6 +25,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServer;
 import net.lax1dude.eaglercraft.backend.server.base.NettyPipelineData;
+import net.lax1dude.eaglercraft.backend.server.base.ProtocolLadder;
 import net.lax1dude.eaglercraft.backend.server.base.pipeline.BufferUtils;
 import net.lax1dude.eaglercraft.backend.server.base.pipeline.WebSocketEaglerInitialHandler;
 
@@ -40,9 +41,6 @@ public class VanillaInitializer {
 	private static final int STATE_STALLING = 2;
 	private static final int STATE_COMPLETE = 3;
 	private static final int MAX_PROTOCOL_RETRIES = 4;
-	private static final int[] PROTOCOL_LADDER = new int[] { 47, 107, 109, 110, 210, 315, 316, 335, 338, 340, 393,
-			401, 404, 477, 480, 485, 490, 498, 573, 575, 578, 735, 736, 751, 753, 754, 755, 756, 757, 758,
-			759, 760, 761, 762, 763, 764, 765, 766, 767, 768, 769 };
 	private static final int[] COMPATIBILITY_FALLBACKS = new int[] { 754, 340, 47 };
 
 	private int connectionState = STATE_PRE;
@@ -50,6 +48,7 @@ public class VanillaInitializer {
 	private int backendProtocolOverride = Integer.MIN_VALUE;
 	private int retryCount = 0;
 	private final List<Integer> triedProtocols = new ArrayList<>(6);
+	private final int[] protocolLadder;
 
 	public VanillaInitializer(EaglerXServer<?> server, NettyPipelineData pipelineData,
 			WebSocketEaglerInitialHandler inboundHandler) {
@@ -57,6 +56,7 @@ public class VanillaInitializer {
 		this.pipelineData = pipelineData;
 		this.inboundHandler = inboundHandler;
 		this.bufferedPackets = new LinkedList<>();
+		this.protocolLadder = ProtocolLadder.buildForConnection(pipelineData.minecraftProtocol);
 	}
 
 	public void init(ChannelHandlerContext ctx) {
@@ -320,8 +320,8 @@ public class VanillaInitializer {
 	}
 
 	private int findLowerUntestedProtocol(int current) {
-		for (int i = PROTOCOL_LADDER.length - 1; i >= 0; --i) {
-			int candidate = PROTOCOL_LADDER[i];
+		for (int i = protocolLadder.length - 1; i >= 0; --i) {
+			int candidate = protocolLadder[i];
 			if (candidate < current && !isProtocolTried(candidate)) {
 				return candidate;
 			}
@@ -330,8 +330,8 @@ public class VanillaInitializer {
 	}
 
 	private int findHigherUntestedProtocol(int current) {
-		for (int i = 0; i < PROTOCOL_LADDER.length; ++i) {
-			int candidate = PROTOCOL_LADDER[i];
+		for (int i = 0; i < protocolLadder.length; ++i) {
+			int candidate = protocolLadder[i];
 			if (candidate > current && !isProtocolTried(candidate)) {
 				return candidate;
 			}

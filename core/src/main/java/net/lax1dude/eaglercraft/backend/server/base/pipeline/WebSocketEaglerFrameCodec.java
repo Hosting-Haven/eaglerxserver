@@ -16,18 +16,23 @@
 
 package net.lax1dude.eaglercraft.backend.server.base.pipeline;
 
+import java.util.concurrent.TimeUnit;
+
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 
-@ChannelHandler.Sharable
 public class WebSocketEaglerFrameCodec extends ChannelDuplexHandler {
 
-	public static final WebSocketEaglerFrameCodec INSTANCE = new WebSocketEaglerFrameCodec();
+	private final long gracePeriodMillis;
+
+	public WebSocketEaglerFrameCodec(long gracePeriodMillis) {
+		this.gracePeriodMillis = Math.max(gracePeriodMillis, 0l);
+	}
 
 	@Override
 	public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -36,7 +41,18 @@ public class WebSocketEaglerFrameCodec extends ChannelDuplexHandler {
 		} else if (msg instanceof WebSocketFrame msg2) {
 			// Text or close frames
 			msg2.release();
-			ctx.close();
+			if (gracePeriodMillis > 0l) {
+				// Hold the channel open for the configured grace period instead of closing
+				// instantly, so a briefly flickering connection has a chance to recover.
+				Channel channel = ctx.channel();
+				channel.eventLoop().schedule(() -> {
+					if (channel.isActive()) {
+						channel.close();
+					}
+				}, gracePeriodMillis, TimeUnit.MILLISECONDS);
+			} else {
+				ctx.close();
+			}
 		} else {
 			ctx.fireChannelRead(msg);
 		}

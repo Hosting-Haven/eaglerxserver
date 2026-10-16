@@ -58,7 +58,8 @@ public class WebSocketInitialHandler extends ChannelInboundHandlerAdapter {
 						new WebSocketEaglerInitialHandler(pipelineData.server, pipelineData));
 				pipeline.fireUserEventTriggered(EnumPipelineEvent.EAGLER_STATE_WEBSOCKET_PLAYER);
 				pipeline.replace(PipelineTransformer.HANDLER_WS_INITIAL, PipelineTransformer.HANDLER_FRAME_CODEC,
-						WebSocketEaglerFrameCodec.INSTANCE);
+						new WebSocketEaglerFrameCodec(pipelineData.server.getConfig().getSettings()
+								.getConnectionGracePeriod()));
 				pipeline.fireUserEventTriggered(EnumPipelineEvent.EAGLER_INJECTED_FRAME_HANDLERS);
 				ctx.fireChannelRead(msg2.content().retain());
 			} else if (msg instanceof TextWebSocketFrame msg2) {
