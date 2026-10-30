@@ -11,4 +11,13 @@ dependencies {
 	compileOnly(libs.velocity.api)
 	compileOnly(libs.bundles.netty.all)
 	annotationProcessor(libs.velocity.api)
+	testImplementation(libs.velocity.api)
+	testImplementation(libs.adventure.api)
+	testImplementation(libs.adventure.serializer.plain)
+	testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.2"
+	testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.2"
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }

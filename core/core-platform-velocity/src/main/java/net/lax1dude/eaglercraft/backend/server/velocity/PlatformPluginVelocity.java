@@ -117,11 +117,12 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 	private IPlatformLogger loggerImpl;
 	private IEventDispatchAdapter<Player, Component> eventDispatcherImpl;
 
-	protected boolean aborted = false;
-	protected Runnable onServerEnable;
-	protected Runnable onServerDisable;
-	protected IEaglerXServerNettyPipelineInitializer<IPipelineData> pipelineInitializer;
-	protected IEaglerXServerLoginInitializer<IPipelineData> loginInitializer;
+        /** Mirrors the Java MOTD onto Eaglercraft MOTD responses. */
+        private final MotdPassthrough motdPassthrough;
+
+        MotdPassthrough getMotdPassthrough() {
+                return motdPassthrough;
+        }
 	protected IEaglerXServerPlayerInitializer<IPipelineData, Object, Player> playerInitializer;
 	protected IEaglerXServerJoinListener<Player> serverJoinListener;
 	protected Collection<IEaglerXServerCommandType<Player>> commandsList;

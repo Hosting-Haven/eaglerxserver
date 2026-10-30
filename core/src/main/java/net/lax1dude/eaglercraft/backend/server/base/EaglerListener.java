@@ -268,6 +268,11 @@ public class EaglerListener implements IEaglerListenerInfo, IEaglerXServerListen
 		return listenerConf;
 	}
 
+	@Override
+	public String getMotdPassthroughTarget() {
+		return listenerConf.getMotdPassthroughTarget();
+	}
+
 	public CompoundRateLimiterMap getRateLimiter() {
 		return rateLimiter;
 	}

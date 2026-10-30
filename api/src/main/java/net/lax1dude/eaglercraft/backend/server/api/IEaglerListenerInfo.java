@@ -55,4 +55,18 @@ public interface IEaglerListenerInfo extends IAttributeHolder {
 
 	boolean isForwardIP();
 
+	/**
+	 * Where this listener should read its Java MOTD from, or null to use the
+	 * proxy-wide default.
+	 *
+	 * Accepts the same values as the MOTD passthrough setting: {@code host:port},
+	 * the name of a backend server, or an opt-out word such as {@code off} to keep
+	 * this listener's configured MOTD. Defaults to null so that implementations
+	 * which predate this setting are unaffected.
+	 */
+	@Nullable
+	default String getMotdPassthroughTarget() {
+		return null;
+	}
+
 }

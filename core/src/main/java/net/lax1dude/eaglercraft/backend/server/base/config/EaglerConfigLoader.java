@@ -931,6 +931,15 @@ public class EaglerConfigLoader {
 								+ "with the server_icon when players add this server's listener address to "
 								+ "their client's Multiplayer menu server list.")
 				.stream().map((str) -> ChatColor.translateAlternateColorCodes('&', str)).iterator());
+		String motdPassthroughTarget = listener.getString(
+				"motd_passthrough_target", "",
+				"Default value is '', set this to mirror a Java server's MOTD onto this listener's "
+						+ "Eaglercraft MOTD. Accepts a 'host:port', the name of a server configured in "
+						+ "velocity.toml, or 'off' to keep this listener's own server_motd. Leave empty to "
+						+ "follow the proxy-wide -Deaglercraft.motd.target setting, if any.");
+		if (motdPassthroughTarget.trim().length() == 0) {
+			motdPassthroughTarget = null;
+		}
 		boolean allowMOTD = listener.getBoolean(
 				"allow_motd", true,
 				"Default value is true, is this listener should respond to MOTD queries or not");
@@ -1002,7 +1011,8 @@ public class EaglerConfigLoader {
 				dualStackHAProxyDetection, forceDisableHAProxy, backendMinecraftProtocolOverride,
 				enableTLS, requireTLS, tlsManagedByExternalPlugin,
 				tlsPublicChainFile, tlsPrivateKeyFile, tlsPrivateKeyPassword, tlsAutoRefreshCert,
-				redirectLegacyClientsTo, serverIcon, serverMOTD, allowMOTD, allowQuery, showMOTDPlayerList,
+				redirectLegacyClientsTo, serverIcon, serverMOTD, motdPassthroughTarget, allowMOTD, allowQuery,
+				showMOTDPlayerList,
 				allowCookieRevokeQuery, motdCacheTTL, motdCacheAnimation, motdCacheResults, motdCacheTrending,
 				motdCachePortfolios, limitIP, limitLogin, limitMOTD, limitQuery, limitHTTP, exceptionsConfList);
 	}

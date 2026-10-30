@@ -38,6 +38,12 @@ import net.lax1dude.eaglercraft.v1_8.socket.protocol.util.PacketImageData;
 
 public class PauseMenuBuilder implements IPauseMenuBuilder {
 
+	/**
+	 * Largest icon dimension the pause menu packet can carry. Icons are drawn from
+	 * the client's GUI texture, so anything larger is rejected rather than sent.
+	 */
+	public static final int MAX_ICON_DIMENSION = 64;
+
 	private EnumServerInfoButton serverInfoButtonMode = EnumServerInfoButton.NONE;
 	private String serverInfoButtonText = null;
 	private String serverInfoURL = null;
@@ -372,9 +378,10 @@ public class PauseMenuBuilder implements IPauseMenuBuilder {
 	}
 
 	private static void checkDimensions(PacketImageData etr) {
-		if (etr.width < 1 || etr.width > 64 || etr.height < 1 || etr.height > 64) {
-			throw new IllegalArgumentException(
-					"Invalid image dimensions, must be between 1x1 and 64x64, got " + etr.width + "x" + etr.height);
+		if (etr.width < 1 || etr.width > MAX_ICON_DIMENSION || etr.height < 1
+				|| etr.height > MAX_ICON_DIMENSION) {
+			throw new IllegalArgumentException("Invalid image dimensions, must be between 1x1 and "
+					+ MAX_ICON_DIMENSION + "x" + MAX_ICON_DIMENSION + ", got " + etr.width + "x" + etr.height);
 		}
 	}
 

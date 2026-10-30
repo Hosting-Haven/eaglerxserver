@@ -46,6 +46,8 @@ import com.velocitypowered.api.proxy.messages.ChannelMessageSource;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.TranslatableComponent;
 import net.lax1dude.eaglercraft.backend.server.adapter.IEaglerXServerPlayerCountHandler;
 import net.lax1dude.eaglercraft.backend.server.adapter.IEaglerXServerMessageHandler;
 import net.lax1dude.eaglercraft.backend.server.adapter.IPipelineData;
@@ -54,11 +56,20 @@ import net.lax1dude.eaglercraft.backend.server.adapter.IPlatformServer;
 import net.lax1dude.eaglercraft.backend.server.adapter.PipelineAttributes;
 import net.lax1dude.eaglercraft.backend.server.base.BasePlayerInstance;
 import net.lax1dude.eaglercraft.backend.server.base.ProtocolLadder;
+import net.lax1dude.eaglercraft.backend.server.base.compat.BackendConnectStatus;
+import net.lax1dude.eaglercraft.backend.server.base.compat.BackendReasonKind;
+import net.lax1dude.eaglercraft.backend.server.base.compat.CompatFailure;
+import net.lax1dude.eaglercraft.backend.server.base.compat.CompatFailureCategory;
+import net.lax1dude.eaglercraft.backend.server.base.compat.CompatFailureClassifier;
 import net.lax1dude.eaglercraft.backend.server.velocity.PlatformPluginVelocity.PluginMessageHandler;
 
 class VelocityListener {
 
-	private static final int MAX_PROTOCOL_RETRIES = 4;
+	static final int MAX_PROTOCOL_RETRIES = 4;
+	// A transient transport failure may be re-attempted, but only a bounded number
+	// of times and without changing protocol version, because the protocol version
+	// has nothing to do with a timeout or an unreachable route.
+	static final int MAX_TRANSIENT_RETRIES = 1;
 	private static final int[] RETRY_PROTOCOLS = new int[] { 754, 340, 47 };
 
 	private static class BackendProtocolOverride {
@@ -75,8 +86,20 @@ class VelocityListener {
 
 	VelocityListener(PlatformPluginVelocity plugin) {
 		this.plugin = plugin;
-	}
+                this.motdPassthrough = plugin.getMotdPassthrough();
+        }
 
+        private final MotdPassthrough motdPassthrough;
+
+        /**
+         * Mirror the Java MOTD onto the Eaglercraft response.
+         *
+         * Runs before client listeners so a network's own MOTD plugin can still
+         * override the result; the passthrough is a default, not a cage.
+         */
+        @Subscribe(priority = 16384, async = false)
+        public void onEaglercraftMOTDEvent(net.lax1dude.eaglercraft.backend.server.api.velocity.event.EaglercraftMOTDEvent event) {
+                motdPassthrough.apply(event.getMOTDConnection());
 	@Subscribe(priority = -16384, async = false)
 	public void onGameProfileRequestEvent(GameProfileRequestEvent gameProfileEvent) {
 		IPipelineData pipelineData = VelocityUnsafe.getInboundChannel(gameProfileEvent.getConnection())
@@ -171,7 +194,7 @@ class VelocityListener {
 					startManagedConnectAttempt(player, target, originalProtocol,
 							buildProtocolAttemptPlan(originalProtocol,
 									successfulBackendProtocols.get(target.getServerInfo().getName())),
-							0, new ArrayList<>(MAX_PROTOCOL_RETRIES + 1));
+							0, 0, new ArrayList<>(MAX_PROTOCOL_RETRIES + 1));
 				}
 			}
 		}
@@ -215,7 +238,7 @@ class VelocityListener {
 		return isEaglerPlayer(plugin.getPlayer(player));
 	}
 
-	private static int[] buildProtocolAttemptPlan(int currentProtocol, Integer knownBackendProtocol) {
+	static int[] buildProtocolAttemptPlan(int currentProtocol, Integer knownBackendProtocol) {
 		LinkedHashSet<Integer> plan = new LinkedHashSet<>();
 		if (knownBackendProtocol != null) {
 			plan.add(knownBackendProtocol);
@@ -243,37 +266,39 @@ class VelocityListener {
 	}
 
 	private void startManagedConnectAttempt(Player player, RegisteredServer target, int originalProtocol, int[] plan,
-			int attemptIndex, List<Integer> tried) {
+			int attemptIndex, int transientRetries, List<Integer> tried) {
 		if (!player.isActive()) {
 			restoreManagedConnect(player);
 			return;
 		}
+
+		String serverName = target.getServerInfo().getName();
+
 		if (attemptIndex >= plan.length || attemptIndex > MAX_PROTOCOL_RETRIES) {
-			plugin.logger().warn("[compat] Exhausted managed retries for " + player.getUsername() + " -> "
-					+ target.getServerInfo().getName() + " tried=" + tried);
-			disconnectOrNotifyFailure(player, target,
-					Component.text("Unable to connect to " + target.getServerInfo().getName()
-							+ ": incompatible protocol"));
+			plugin.logger().warn("[compat] Exhausted managed retries for " + player.getUsername() + " -> " + serverName
+					+ " tried=" + tried + " category=PROTOCOL_MISMATCH reason=protocol ladder exhausted");
+			disconnectOrNotifyFailure(player, target, VelocityCompatFailureMessages
+					.componentFor(CompatFailureCategory.PROTOCOL_MISMATCH, serverName, null));
 			restoreManagedConnect(player);
 			return;
 		}
 
 		int protocol = plan[attemptIndex];
 		if (!setBackendProtocolOverride(player, target, originalProtocol, protocol)) {
-			disconnectOrNotifyFailure(player, target, Component.text("Unable to connect to "
-					+ target.getServerInfo().getName() + ": ViaVersion is required for cross-version backends"));
+			disconnectOrNotifyFailure(player, target, Component.text("Unable to connect to " + serverName
+					+ ": ViaVersion is required for cross-version backends", NamedTextColor.RED));
 			restoreManagedConnect(player);
 			return;
 		}
 
 		tried.add(Integer.valueOf(protocol));
 		plugin.logger().info("[compat] Managed connect attempt " + (attemptIndex + 1) + "/"
-				+ Math.min(plan.length, MAX_PROTOCOL_RETRIES + 1) + " for " + player.getUsername() + " -> "
-				+ target.getServerInfo().getName() + " using protocol " + protocol);
+				+ Math.min(plan.length, MAX_PROTOCOL_RETRIES + 1) + " for " + player.getUsername() + " -> " + serverName
+				+ " using protocol " + protocol);
 		if (plugin.isHeavyConnectionDebugEnabled()) {
-			plugin.logger().info("[trace] connect attempt state player=" + player.getUsername() + " target="
-					+ target.getServerInfo().getName() + " tried=" + tried + " originalProtocol="
-					+ originalProtocol);
+			plugin.logger().info("[trace] connect attempt state player=" + player.getUsername() + " target=" + serverName
+					+ " tried=" + tried + " originalProtocol=" + originalProtocol + " transientRetries="
+					+ transientRetries);
 		}
 
 		bypassManagedPreConnect.add(player.getUniqueId());
@@ -283,46 +308,109 @@ class VelocityListener {
 				return;
 			}
 
-			if (throwable != null) {
-				plugin.logger().warn("[compat] Managed attempt failed for " + player.getUsername() + " -> "
-						+ target.getServerInfo().getName() + " protocol " + protocol + " throwable="
-						+ throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
-				startManagedConnectAttempt(player, target, originalProtocol, plan, attemptIndex + 1, tried);
-				return;
-			}
-
+			// A rejected login must never become the cached protocol for this backend.
 			if (result != null && result.isSuccessful()) {
-				successfulBackendProtocols.put(target.getServerInfo().getName(), Integer.valueOf(protocol));
-				plugin.logger().info("[compat] Managed connect success for " + player.getUsername() + " -> "
-						+ target.getServerInfo().getName() + " after attempts=" + tried
-						+ " (cached protocol " + protocol + ")");
+				successfulBackendProtocols.put(serverName, Integer.valueOf(protocol));
+				plugin.logger().info("[compat] Managed connect success for " + player.getUsername() + " -> " + serverName
+						+ " after attempts=" + tried + " (cached protocol " + protocol + ")");
 				return;
 			}
 
-			Component reasonComponent = result != null ? result.getReasonComponent().orElse(null) : null;
-			String reason = reasonComponent != null ? plugin.getComponentHelper().serializePlainText(reasonComponent)
-					: "";
-			ConnectionRequestBuilder.Status status = result != null ? result.getStatus()
-					: ConnectionRequestBuilder.Status.SERVER_DISCONNECTED;
+			Component backendReason = result != null ? result.getReasonComponent().orElse(null) : null;
+			ConnectionRequestBuilder.Status status = result != null ? result.getStatus() : null;
 
-			plugin.logger().info("[compat] Managed attempt failed for " + player.getUsername() + " -> "
-					+ target.getServerInfo().getName() + " protocol=" + protocol + " status=" + status + " reason='"
-					+ reason + "'");
+			String reasonText = plainReason(backendReason);
 
-			if (attemptIndex + 1 <= MAX_PROTOCOL_RETRIES) {
-				startManagedConnectAttempt(player, target, originalProtocol, plan, attemptIndex + 1, tried);
-			} else {
-				disconnectOrNotifyFailure(player, target, reasonComponent != null ? reasonComponent
-						: Component.text("Unable to connect to " + target.getServerInfo().getName()));
+			CompatFailure failure = CompatFailureClassifier.classify(mapStatus(status), reasonKindOf(backendReason),
+					reasonText, throwable);
+
+			CompatRetryStep step = CompatRetryStep.next(failure, attemptIndex, transientRetries, plan.length,
+					MAX_PROTOCOL_RETRIES, MAX_TRANSIENT_RETRIES);
+
+			// The category and the retry decision are logged together with the backend
+			// and the attempted protocol, so a support request can be answered without
+			// reproducing the connection.
+			plugin.logger().info("[compat] Managed attempt failed for " + player.getUsername() + " -> " + serverName
+					+ " protocol=" + protocol + " status=" + status + " category=" + failure.getCategory()
+					+ " retry=" + step.retry + " reason='" + reasonText + "'"
+					+ (failure.getDetail().isEmpty() ? "" : " detail=" + failure.getDetail()));
+
+			if (!step.retry) {
+				disconnectOrNotifyFailure(player, target,
+						VelocityCompatFailureMessages.componentFor(failure.getCategory(), serverName, backendReason));
 				restoreManagedConnect(player);
+				return;
 			}
+
+			startManagedConnectAttempt(player, target, originalProtocol, plan, step.attemptIndex,
+					step.transientRetries, tried);
 		});
+	}
+
+	/**
+	 * Map the platform status onto the platform-neutral enum.
+	 */
+	static BackendConnectStatus mapStatus(ConnectionRequestBuilder.Status status) {
+		if (status == null) {
+			return BackendConnectStatus.UNKNOWN;
+		}
+
+		switch (status) {
+			case SUCCESS:
+				return BackendConnectStatus.SUCCESS;
+			case SERVER_DISCONNECTED:
+				return BackendConnectStatus.SERVER_DISCONNECTED;
+			case ALREADY_CONNECTED:
+				return BackendConnectStatus.ALREADY_CONNECTED;
+			case CONNECTION_IN_PROGRESS:
+				return BackendConnectStatus.CONNECTION_IN_PROGRESS;
+			case CONNECTION_CANCELLED:
+				return BackendConnectStatus.CONNECTION_CANCELLED;
+			default:
+				return BackendConnectStatus.UNKNOWN;
+		}
+	}
+
+	/**
+	 * Decide who authored a disconnect reason.
+	 * 
+	 * Velocity reports a failed backend connection as SERVER_DISCONNECTED with its
+	 * own translatable "internal server connection error" when the backend never
+	 * sent a kick of its own. That key is the difference between "the backend said
+	 * no" and "the connection never worked", and it is what makes it safe to retry
+	 * the ladder for a real protocol mismatch while never retrying a whitelist
+	 * rejection.
+	 */
+	static BackendReasonKind reasonKindOf(Component reason) {
+		if (reason == null) {
+			return BackendReasonKind.NONE;
+		}
+
+		if (reason instanceof TranslatableComponent) {
+			String key = ((TranslatableComponent) reason).key();
+
+			if (key != null && key.startsWith("velocity.error.")) {
+				return BackendReasonKind.TRANSPORT_GENERIC;
+			}
+		}
+
+		if (Component.empty().equals(reason)) {
+			return BackendReasonKind.NONE;
+		}
+
+		return BackendReasonKind.BACKEND_AUTHORED;
+	}
+
+	private String plainReason(Component reason) {
+		return reason != null ? plugin.getComponentHelper().serializePlainText(reason) : "";
 	}
 
 	private void disconnectOrNotifyFailure(Player player, RegisteredServer target, Component reasonComponent) {
 		if (player.getCurrentServer().isPresent()) {
 			player.sendMessage(reasonComponent);
 		} else {
+			// The component is passed through untouched so the client renders the real
+			// reason, including colours and translatable text.
 			player.disconnect(reasonComponent);
 		}
 		plugin.logger()

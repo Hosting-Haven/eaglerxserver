@@ -64,18 +64,19 @@ public class PacketImageLoader {
 
 	public static PacketImageData loadPacketImageData(BufferedImage img, int maxWidth, int maxHeight) {
 		checkSize(maxWidth, maxHeight);
+		if (img == null) {
+			throw new IllegalArgumentException(
+					"Image could not be decoded, the file may not be a supported image format");
+		}
 		int w = img.getWidth();
 		int h = img.getHeight();
 		if (w > maxWidth || h > maxHeight) {
-			float aspectRatio = (float) w / (float) h;
-			int nw, nh;
-			if (aspectRatio >= 1.0f) {
-				nw = (int) (maxWidth / aspectRatio);
-				nh = maxHeight;
-			} else {
-				nw = maxWidth;
-				nh = (int) (maxHeight * aspectRatio);
-			}
+			// Scale by the tighter of the two limits so the aspect ratio survives and the
+			// result always fits. Rounding to 0 would produce an empty image, so the
+			// minimum is 1 pixel.
+			float scale = Math.min((float) maxWidth / (float) w, (float) maxHeight / (float) h);
+			int nw = Math.max(1, Math.round(w * scale));
+			int nh = Math.max(1, Math.round(h * scale));
 			BufferedImage resized = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_ARGB);
 			Graphics2D g = (Graphics2D) resized.getGraphics();
 			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
@@ -84,6 +85,11 @@ public class PacketImageLoader {
 			g.drawImage(img, 0, 0, nw, nh, 0, 0, w, h, null);
 			g.dispose();
 			img = resized;
+			// Read the pixels back at the resized dimensions. Using the original ones
+			// asked getRGB for more pixels than the image had, which threw
+			// ArrayIndexOutOfBoundsException for every oversized image.
+			w = nw;
+			h = nh;
 		}
 		int[] pixels = new int[w * h];
 		img.getRGB(0, 0, w, h, pixels, 0, w);

@@ -83,6 +83,7 @@ public class ConfigDataListener {
 	private final String redirectLegacyClientsTo;
 	private final String serverIcon;
 	private final List<String> serverMOTD;
+	private final String motdPassthroughTarget;
 	private final boolean allowMOTD;
 	private final boolean allowQuery;
 	private final boolean showMOTDPlayerList;
@@ -107,7 +108,8 @@ public class ConfigDataListener {
 			int backendMinecraftProtocolOverride,
 			boolean enableTLS, boolean requireTLS, boolean tlsManagedByExternalPlugin, String tlsPublicChainFile,
 			String tlsPrivateKeyFile, String tlsPrivateKeyPassword, boolean tlsAutoRefreshCert,
-			String redirectLegacyClientsTo, String serverIcon, List<String> serverMOTD, boolean allowMOTD,
+			String redirectLegacyClientsTo, String serverIcon, List<String> serverMOTD,
+			String motdPassthroughTarget, boolean allowMOTD,
 			boolean allowQuery, boolean showMOTDPlayerList, boolean allowCookieRevokeQuery, int motdCacheTTL,
 			boolean motdCacheAnimation, boolean motdCacheResults, boolean motdCacheTrending,
 			boolean motdCachePortfolios, ConfigRateLimit limitIP, ConfigRateLimit limitLogin, ConfigRateLimit limitMOTD,
@@ -136,6 +138,7 @@ public class ConfigDataListener {
 		this.redirectLegacyClientsTo = redirectLegacyClientsTo;
 		this.serverIcon = serverIcon;
 		this.serverMOTD = serverMOTD;
+		this.motdPassthroughTarget = motdPassthroughTarget;
 		this.allowMOTD = allowMOTD;
 		this.allowQuery = allowQuery;
 		this.showMOTDPlayerList = showMOTDPlayerList;
@@ -244,6 +247,10 @@ public class ConfigDataListener {
 
 	public List<String> getServerMOTD() {
 		return serverMOTD;
+	}
+
+	public String getMotdPassthroughTarget() {
+		return motdPassthroughTarget;
 	}
 
 	public boolean isAllowMOTD() {

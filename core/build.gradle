@@ -29,6 +29,12 @@ dependencies {
 	compileOnly(libs.slf4j)
 	compileOnly(libs.skinsrestorer.api)
 	sqliteDriver project(":skin-cache:sqlite-jdbc-jar")
+	testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.2"
+	testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.2"
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }
 
 def embedSQLiteJar(com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar taskIn) {

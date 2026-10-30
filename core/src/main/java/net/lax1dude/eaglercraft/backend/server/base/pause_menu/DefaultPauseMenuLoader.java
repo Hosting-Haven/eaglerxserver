@@ -70,8 +70,11 @@ class DefaultPauseMenuLoader {
 					pauseMenuConf.getDiscordButtonURL());
 		}
 		for (Map.Entry<String, String> etr : pauseMenuConf.getCustomImages().entrySet()) {
-			builder.setMenuIcon(etr.getKey(),
-					PacketImageLoader.loadPacketImageData(new File(dataDir, etr.getValue()), 255, 255));
+			// Scale to the icon limit rather than a larger arbitrary size: setMenuIcon
+			// rejects anything above it, so asking for more only produced an exception
+			// after the work had already been done.
+			builder.setMenuIcon(etr.getKey(), PacketImageLoader.loadPacketImageData(new File(dataDir, etr.getValue()),
+					PauseMenuBuilder.MAX_ICON_DIMENSION, PauseMenuBuilder.MAX_ICON_DIMENSION));
 		}
 		return builder.buildPauseMenu();
 	}
