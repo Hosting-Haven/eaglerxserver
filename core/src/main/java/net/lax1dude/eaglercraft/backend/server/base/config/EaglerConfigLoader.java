@@ -46,6 +46,7 @@ import io.netty.channel.unix.DomainSocketAddress;
 import net.lax1dude.eaglercraft.backend.server.adapter.EnumAdapterPlatformType;
 import net.lax1dude.eaglercraft.backend.server.adapter.IPlatform;
 import net.lax1dude.eaglercraft.backend.server.adapter.IPlatformLogger;
+import net.lax1dude.eaglercraft.backend.server.api.EnumMotdPassthroughPolicy;
 import net.lax1dude.eaglercraft.backend.server.api.voice.ICEServerEntry;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServerVersion;
 import net.lax1dude.eaglercraft.backend.server.config.IEaglerConfList;
@@ -522,7 +523,8 @@ public class EaglerConfigLoader {
 		Map<String, ConfigDataListener> listeners;
 		if (platform == EnumAdapterPlatformType.BUKKIT) {
 			listeners = root.loadConfig("listener", (config) -> {
-				return ImmutableMap.of("default", loadListener(config, "default", platform, secretLoader));
+				return ImmutableMap.of("default",
+						loadListener(config, "default", platform, secretLoader, logger));
 			});
 		} else {
 			listeners = root.loadConfig("listeners", (config) -> {
@@ -552,7 +554,7 @@ public class EaglerConfigLoader {
 					while (map.containsKey(key)) {
 						key = "_" + ++j;
 					}
-					map.put(key, loadListener(section, key, platform, secretLoader));
+					map.put(key, loadListener(section, key, platform, secretLoader, logger));
 
 				}
 				return ImmutableMap.copyOf(map);
@@ -788,7 +790,7 @@ public class EaglerConfigLoader {
 	}
 
 	private static ConfigDataListener loadListener(IEaglerConfSection listener, String name,
-			EnumAdapterPlatformType platform, Function<String, String> secretLoader) {
+			EnumAdapterPlatformType platform, Function<String, String> secretLoader, IPlatformLogger logger) {
 		SocketAddress injectAddress = null;
 		if (platform != EnumAdapterPlatformType.BUKKIT) {
 			injectAddress = getAddr(listener.getString("inject_address", mapDefaultListener(platform),
@@ -935,11 +937,32 @@ public class EaglerConfigLoader {
 				"motd_passthrough_target", "",
 				"Default value is '', set this to mirror a Java server's MOTD onto this listener's "
 						+ "Eaglercraft MOTD. Accepts a 'host:port', the name of a server configured in "
-						+ "velocity.toml, or 'off' to keep this listener's own server_motd. Leave empty to "
-						+ "follow the proxy-wide -Deaglercraft.motd.target setting, if any.");
+						+ "velocity.toml, 'auto' to use the MOTD of whichever backend Velocity would send the player "
+						+ "to (following velocity.toml forced-hosts and the try order), or 'off' to keep this "
+						+ "listener's own server_motd. Leave empty to follow the proxy-wide "
+						+ "-Deaglercraft.motd.target setting, if any.");
 		if (motdPassthroughTarget.trim().length() == 0) {
 			motdPassthroughTarget = null;
 		}
+		String motdPassthroughPolicyRaw = listener.getString(
+				"motd_passthrough_backend_policy", "all",
+				"Default value is 'all', restricts which backends may supply the MOTD when motd_passthrough_target is "
+						+ "'auto'. 'all' accepts every backend the automatic routing could select, 'selected' accepts only "
+						+ "the names listed in motd_passthrough_allowed_backends, and 'none' always keeps this listener's own "
+						+ "server_motd. This never changes which backend players are routed to.");
+		EnumMotdPassthroughPolicy motdPassthroughBackendPolicy = EnumMotdPassthroughPolicy.parse(motdPassthroughPolicyRaw);
+		if (motdPassthroughBackendPolicy == null) {
+			logger.warn("Invalid motd_passthrough_backend_policy \"" + motdPassthroughPolicyRaw + "\" on listener \""
+					+ name + "\", expected one of: " + EnumMotdPassthroughPolicy.describeValidValues()
+					+ ". Falling back to 'all'.");
+			motdPassthroughBackendPolicy = EnumMotdPassthroughPolicy.ALL;
+		}
+		IEaglerConfList motdPassthroughAllowedConf = listener.getList("motd_passthrough_allowed_backends");
+		List<String> motdPassthroughAllowedBackends = ImmutableList
+				.copyOf(motdPassthroughAllowedConf.getAsStringList(() -> Collections.<String>emptyList(),
+						"Default value is an empty list. When motd_passthrough_backend_policy is 'selected', lists the "
+								+ "names of servers, as configured in velocity.toml, whose MOTD may be shown. Names are matched "
+								+ "case-insensitively and ignored by every other policy."));
 		boolean allowMOTD = listener.getBoolean(
 				"allow_motd", true,
 				"Default value is true, is this listener should respond to MOTD queries or not");
@@ -1011,7 +1034,9 @@ public class EaglerConfigLoader {
 				dualStackHAProxyDetection, forceDisableHAProxy, backendMinecraftProtocolOverride,
 				enableTLS, requireTLS, tlsManagedByExternalPlugin,
 				tlsPublicChainFile, tlsPrivateKeyFile, tlsPrivateKeyPassword, tlsAutoRefreshCert,
-				redirectLegacyClientsTo, serverIcon, serverMOTD, motdPassthroughTarget, allowMOTD, allowQuery,
+				redirectLegacyClientsTo, serverIcon, serverMOTD, motdPassthroughTarget,
+				motdPassthroughBackendPolicy, motdPassthroughPolicyRaw, motdPassthroughAllowedBackends,
+				allowMOTD, allowQuery,
 				showMOTDPlayerList,
 				allowCookieRevokeQuery, motdCacheTTL, motdCacheAnimation, motdCacheResults, motdCacheTrending,
 				motdCachePortfolios, limitIP, limitLogin, limitMOTD, limitQuery, limitHTTP, exceptionsConfList);

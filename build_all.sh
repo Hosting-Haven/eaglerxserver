@@ -2,10 +2,11 @@
 #
 # Builds every EaglerXServer jar and copies them to the repository root.
 #
-# The Gradle build runs inside a Java 21 container by default. This is not
-# gratuitous: the host JDK is newer than Gradle 8.5 supports, and a host-side
-# run fails with "BUG! exception in phase 'semantic analysis' ... Unsupported
-# class file major version 70".
+# The Gradle build runs inside a Java 25 container by default. This is not
+# gratuitous: the build pins its Java toolchain to 25 (velocity-api 4.3.0
+# publishes Java 25 class files), so a container whose JDK is exactly 25 lets
+# Gradle use it directly instead of downloading a matching toolchain first.
+# The host JDK is newer still (26), so a host-side run would need that download.
 #
 # Overrides:
 #   EAGLERX_BUILD_LOCAL=1     build with the host JDK instead of Docker
@@ -14,7 +15,7 @@
 
 set -e
 
-IMAGE="${EAGLERX_BUILD_IMAGE:-ghcr.io/pterodactyl/yolks:java_21}"
+IMAGE="${EAGLERX_BUILD_IMAGE:-ghcr.io/pterodactyl/yolks:java_25}"
 GRADLE_CACHE="${EAGLERX_GRADLE_CACHE:-/tmp/gradle-cache2}"
 
 TASKS="core:shadowJar backend-rpc-core:shadowJar rewind_v1_5:shadowJar eaglermotd:shadowJar eaglerweb:shadowJar plan:shadowJar supervisor-core:shadowJar"
@@ -29,7 +30,7 @@ else
 	echo "Building in $IMAGE"
 
 	# A failed host-side run leaves a cache lock that blocks the container build.
-	rm -rf .gradle/8.5/checksums .gradle/8.5/scripts 2>/dev/null || true
+	rm -rf .gradle/9.8.2/checksums .gradle/9.8.2/scripts 2>/dev/null || true
 
 	# --entrypoint bash is required: the image's own entrypoint consumes the
 	# command, which shows up as "exec: sh gradlew ... not found".

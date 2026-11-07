@@ -36,7 +36,11 @@ subprojects {
 
 		java {
 			toolchain {
-				languageVersion = JavaLanguageVersion.of(17)
+				// velocity-api 4.3.0 publishes Java 25 class files, so the
+				// compiler (and the plugin's own bytecode target) must
+				// match. It also mirrors the production proxy, which runs
+				// the Java 25 image.
+				languageVersion = JavaLanguageVersion.of(25)
 			}
 		}
 

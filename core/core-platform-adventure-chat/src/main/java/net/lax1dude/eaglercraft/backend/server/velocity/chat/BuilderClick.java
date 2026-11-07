@@ -65,7 +65,17 @@ class BuilderClick<ParentType> implements IBuilderClickEvent<ParentType> {
 				ret = ret.clickEvent(ClickEvent.suggestCommand(value));
 				break;
 			case CHANGE_PAGE:
-				ret = ret.clickEvent(ClickEvent.changePage(value));
+				// adventure 5 models the page as an int. The platform-agnostic
+				// builder carries a String, so a value that is not a number has
+				// no representation and is dropped rather than being allowed to
+				// fail the whole component.
+				if (value != null) {
+					try {
+						ret = ret.clickEvent(ClickEvent.changePage(Integer.parseInt(value.trim())));
+					} catch (NumberFormatException ex) {
+						// not a representable page: leave the component untouched
+					}
+				}
 				break;
 			case COPY_TO_CLIPBOARD:
 				ret = ret.clickEvent(ClickEvent.copyToClipboard(value));

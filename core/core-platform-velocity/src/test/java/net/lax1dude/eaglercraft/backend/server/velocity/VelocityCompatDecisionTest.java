@@ -330,7 +330,7 @@ class VelocityCompatDecisionTest {
 
 		// Bounded: one re-attempt of the same protocol, then stop.
 		assertEquals(1 + VelocityListener.MAX_TRANSIENT_RETRIES, sim.attemptedProtocols.size());
-		assertEquals(2, sim.attemptedProtocols.stream().distinct().count(),
+		assertEquals(1, sim.attemptedProtocols.stream().distinct().count(),
 				"only the starting protocol should have been attempted: " + sim.attemptedProtocols);
 		assertEquals(CompatFailureCategory.TIMEOUT, sim.finalCategory);
 		assertFalse(plain(sim.finalMessage).toLowerCase().contains("protocol"));

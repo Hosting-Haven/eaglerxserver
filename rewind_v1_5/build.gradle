@@ -1,7 +1,7 @@
 
 plugins {
 	id "java-library"
-	id "com.gradleup.shadow" version "8.3.6"
+	id "com.gradleup.shadow" version "9.6.1"
 }
 
 configurations {
@@ -20,6 +20,7 @@ dependencies {
 	compileOnly(libs.slf4j)
 	testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.2"
 	testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.10.2"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"
 }
 
 tasks.withType(Test).configureEach {
@@ -27,8 +28,8 @@ tasks.withType(Test).configureEach {
 }
 
 tasks.named("shadowJar", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
-	group "shadow"
-	description "Builds the JAR for all supported platforms"
+	group = "shadow"
+	description = "Builds the JAR for all supported platforms"
 	configurations = [
 		project.configurations.runtimeClasspath,
 		project.configurations.platformBukkit,
@@ -39,8 +40,8 @@ tasks.named("shadowJar", com.github.jengelman.gradle.plugins.shadow.tasks.Shadow
 }
 
 tasks.register("shadowJarBukkit", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
-	group "shadow"
-	description "Builds the JAR for Bukkit platforms"
+	group = "shadow"
+	description = "Builds the JAR for Bukkit platforms"
 	configurations = [
 		project.configurations.runtimeClasspath,
 		project.configurations.platformBukkit
@@ -49,8 +50,8 @@ tasks.register("shadowJarBukkit", com.github.jengelman.gradle.plugins.shadow.tas
 }
 
 tasks.register("shadowJarBungee", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
-	group "shadow"
-	description "Builds the JAR for Bungee platforms"
+	group = "shadow"
+	description = "Builds the JAR for Bungee platforms"
 	configurations = [
 		project.configurations.runtimeClasspath,
 		project.configurations.platformBungee
@@ -59,8 +60,8 @@ tasks.register("shadowJarBungee", com.github.jengelman.gradle.plugins.shadow.tas
 }
 
 tasks.register("shadowJarVelocity", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
-	group "shadow"
-	description "Builds the JAR for Velocity platforms"
+	group = "shadow"
+	description = "Builds the JAR for Velocity platforms"
 	configurations = [
 		project.configurations.runtimeClasspath,
 		project.configurations.platformVelocity

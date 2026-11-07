@@ -24,6 +24,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -33,6 +34,7 @@ import com.google.common.collect.ImmutableList;
 
 import io.netty.channel.Channel;
 import net.lax1dude.eaglercraft.backend.server.adapter.IEaglerXServerListener;
+import net.lax1dude.eaglercraft.backend.server.api.EnumMotdPassthroughPolicy;
 import net.lax1dude.eaglercraft.backend.server.api.IEaglerListenerInfo;
 import net.lax1dude.eaglercraft.backend.server.api.ITLSManager;
 import net.lax1dude.eaglercraft.backend.server.api.attribute.IAttributeKey;
@@ -271,6 +273,16 @@ public class EaglerListener implements IEaglerListenerInfo, IEaglerXServerListen
 	@Override
 	public String getMotdPassthroughTarget() {
 		return listenerConf.getMotdPassthroughTarget();
+	}
+
+	@Override
+	public EnumMotdPassthroughPolicy getMotdPassthroughBackendPolicy() {
+		return listenerConf.getMotdPassthroughBackendPolicy();
+	}
+
+	@Override
+	public Collection<String> getMotdPassthroughAllowedBackends() {
+		return listenerConf.getMotdPassthroughAllowedBackends();
 	}
 
 	public CompoundRateLimiterMap getRateLimiter() {

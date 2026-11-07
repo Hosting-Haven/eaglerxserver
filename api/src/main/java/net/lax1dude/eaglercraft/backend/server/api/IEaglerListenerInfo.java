@@ -22,6 +22,9 @@ import java.util.List;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import java.util.Collection;
+import java.util.Collections;
+
 import net.lax1dude.eaglercraft.backend.server.api.attribute.IAttributeHolder;
 
 public interface IEaglerListenerInfo extends IAttributeHolder {
@@ -67,6 +70,35 @@ public interface IEaglerListenerInfo extends IAttributeHolder {
 	@Nullable
 	default String getMotdPassthroughTarget() {
 		return null;
+	}
+
+	/**
+	 * Which backends may supply the MOTD when {@link #getMotdPassthroughTarget()}
+	 * is {@code auto}.
+	 *
+	 * <p>
+	 * Only constrains where MOTD information is read from. Player routing is decided
+	 * solely by Velocity's {@code try} list and {@code [forced-hosts]}.
+	 * </p>
+	 *
+	 * Defaults to {@link EnumMotdPassthroughPolicy#ALL} so that implementations
+	 * which predate this setting keep the previous behaviour.
+	 */
+	@Nonnull
+	default EnumMotdPassthroughPolicy getMotdPassthroughBackendPolicy() {
+		return EnumMotdPassthroughPolicy.ALL;
+	}
+
+	/**
+	 * The backend names permitted to supply the MOTD under
+	 * {@link EnumMotdPassthroughPolicy#SELECTED}, empty for every other policy.
+	 *
+	 * Names refer to servers registered in velocity.toml. Defaults to an empty list
+	 * so that implementations which predate this setting are unaffected.
+	 */
+	@Nonnull
+	default Collection<String> getMotdPassthroughAllowedBackends() {
+		return Collections.emptyList();
 	}
 
 }

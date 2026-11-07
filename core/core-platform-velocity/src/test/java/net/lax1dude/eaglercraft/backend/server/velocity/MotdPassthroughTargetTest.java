@@ -153,6 +153,69 @@ class MotdPassthroughTargetTest {
                 assertThrows(IllegalArgumentException.class, () -> MotdPassthrough.parseHostPort("host:70000"));
         }
 
+        // --- auto mode ---------------------------------------------------
+
+        /**
+         * The third mode is a reserved word, not an address, so it must be recognised
+         * before anything tries to parse it as a server name or host:port.
+         */
+        @Test
+        void autoIsRecognisedAsAMode() {
+                assertTrue(MotdPassthrough.isAutoValue("auto"));
+                assertTrue(MotdPassthrough.isAutoValue("AUTO"));
+                assertTrue(MotdPassthrough.isAutoValue("  auto  "));
+                assertFalse(MotdPassthrough.isAutoValue(null));
+                assertFalse(MotdPassthrough.isAutoValue("off"));
+                assertFalse(MotdPassthrough.isAutoValue("lobby"));
+        }
+
+        @Test
+        void autoFromListenersTomlAppliesToThatListener() {
+                MotdPassthrough passthrough = new MotdPassthrough(null);
+
+                assertTrue(passthrough.isAuto("lobby", "auto"));
+                assertFalse(passthrough.isAuto("lobby", "lobby"));
+        }
+
+        /**
+         * A per-listener override outranks listeners.toml, which outranks the
+         * proxy-wide setting. Auto participates in exactly the same precedence as a
+         * fixed target, so a listener can be auto while the proxy follows a backend.
+         */
+        @Test
+        void autoFollowsTheSamePrecedenceAsAFixedTarget() {
+                MotdPassthrough passthrough = new MotdPassthrough(null);
+
+                System.setProperty(PREFIX + "lobby", "auto");
+
+                assertTrue(passthrough.isAuto("lobby", "survival"),
+                                "a per-listener property must outrank listeners.toml");
+        }
+
+        @Test
+        void theGlobalTargetCanBeAuto() {
+                MotdPassthrough passthrough = new MotdPassthrough(null);
+
+                System.setProperty(GLOBAL, "auto");
+
+                assertTrue(passthrough.isAuto("lobby", null),
+                                "with no listener setting, the proxy-wide value applies");
+                assertEquals("auto", MotdPassthrough.globalTargetValue());
+        }
+
+        /**
+         * An explicit listeners.toml value must beat the proxy-wide one, so a single
+         * listener can keep a fixed MOTD while the rest of the proxy is auto.
+         */
+        @Test
+        void listenersTomlOutranksTheGlobalSetting() {
+                MotdPassthrough passthrough = new MotdPassthrough(null);
+
+                System.setProperty(GLOBAL, "auto");
+
+                assertFalse(passthrough.isAuto("lobby", "off"));
+        }
+
         private static void assertTarget(InetSocketAddress target, String host, int port) {
                 assertNotNull(target);
                 assertEquals(host, target.getHostString());

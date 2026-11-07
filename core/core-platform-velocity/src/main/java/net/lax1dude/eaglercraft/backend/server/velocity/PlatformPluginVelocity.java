@@ -17,10 +17,12 @@
 package net.lax1dude.eaglercraft.backend.server.velocity;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -90,10 +92,13 @@ import net.lax1dude.eaglercraft.backend.server.adapter.PipelineAttributes;
 import net.lax1dude.eaglercraft.backend.server.adapter.SLF4JLogger;
 import net.lax1dude.eaglercraft.backend.server.adapter.IPipelineComponent.EnumPipelineComponent;
 import net.lax1dude.eaglercraft.backend.server.adapter.event.IEventDispatchAdapter;
+import net.lax1dude.eaglercraft.backend.server.api.IEaglerXServerAPI;
 import net.lax1dude.eaglercraft.backend.server.api.velocity.EaglerXServerAPI;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServer;
 import net.lax1dude.eaglercraft.backend.server.base.EaglerXServerVersion;
 import net.lax1dude.eaglercraft.backend.server.base.config.ConfigDataRoot;
+import net.lax1dude.eaglercraft.backend.server.base.config.ConfigDataListener;
+import net.lax1dude.eaglercraft.backend.server.base.config.EaglerConfigLoader;
 import net.lax1dude.eaglercraft.backend.server.config.EnumConfigFormat;
 import net.lax1dude.eaglercraft.backend.server.velocity.chat.VelocityComponentHelper;
 import net.lax1dude.eaglercraft.backend.server.velocity.event.VelocityEventDispatchAdapter;
@@ -120,6 +125,9 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
         /** Mirrors the Java MOTD onto Eaglercraft MOTD responses. */
         private final MotdPassthrough motdPassthrough;
 
+        /** Applies persisted MOTD eligibility at runtime; the revision lives here. */
+        private final MotdReloadService motdReloadService;
+
         MotdPassthrough getMotdPassthrough() {
                 return motdPassthrough;
         }
@@ -145,6 +153,11 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 	protected ChannelFactory<? extends ServerChannel> serverUnixChannelFactory;
 	protected EventLoopGroup bossEventLoopGroup;
 	protected EventLoopGroup workerEventLoopGroup;
+	protected Runnable onServerEnable;
+	protected Runnable onServerDisable;
+	protected IEaglerXServerNettyPipelineInitializer<IPipelineData> pipelineInitializer;
+	protected IEaglerXServerLoginInitializer<IPipelineData> loginInitializer;
+	protected boolean aborted = false;
 
 	public class PluginMessageHandler {
 
@@ -176,6 +189,8 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 		componentHelperImpl = new VelocityComponentHelper();
 		cacheConsoleCommandSenderInstance = proxyIn.getConsoleCommandSource();
 		cacheConsoleCommandSenderHandle = new VelocityConsole(cacheConsoleCommandSenderInstance);
+		motdPassthrough = new MotdPassthrough(proxyIn);
+		motdReloadService = createMotdReloadService(proxyIn);
 		registeredCommandsList = new ArrayList<>();
 		ImmutableMap.Builder<String, IPlatformServer<Player>> builder = ImmutableMap.builder();
 		for (RegisteredServer server : proxyIn.getAllServers()) {
@@ -293,6 +308,11 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 		for (IEaglerXServerCommandType<Player> cmd : commandsList) {
 			registeredCommandsList.add((new VelocityCommand(this, cmd)).register());
 		}
+
+		// Runtime MOTD eligibility reload. Registered here rather than through the
+		// platform-agnostic command registry because the policy lives in this
+		// module's MotdPassthrough, and only Velocity's MOTD path reads it.
+		registeredCommandsList.add(new VelocityMotdReloadCommand(motdReloadService).register(this));
 		ImmutableMap.Builder<ChannelIdentifier, PluginMessageHandler> channelMapBuilder = ImmutableMap.builder();
 		for (IEaglerXServerMessageChannel<Player> ch : playerChannelsList) {
 			PluginMessageHandler handler = new PluginMessageHandler(false, ch, ch.getHandler());
@@ -398,7 +418,91 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 				throw new IllegalStateException("Startup aborted");
 			}
 		}
+		// Nothing else starts this poller, and apply() only ever copies an existing
+		// snapshot: without it every listener keeps its listeners.toml MOTD.
+		motdPassthrough.start(this, () -> {
+			try {
+				return IEaglerXServerAPI.instance().getAllEaglerListeners();
+			} catch (RuntimeException ex) {
+				// Listeners may not be registered yet; the next tick retries.
+				return Collections.emptyList();
+			}
+		});
 		aborted = false;
+	}
+
+	/**
+	 * Build the runtime MOTD eligibility reload service.
+	 *
+	 * The three collaborators keep the retry, validation and acknowledgement
+	 * behaviour out of the command, so all of it is testable without a proxy:
+	 *
+	 *  - the config source re-reads listeners.toml through the SAME loader used at
+	 *    startup, so a reload can never disagree with a restart about what the file
+	 *    means;
+	 *  - the server-name check is Velocity's own registry, so an allowed backend
+	 *    that does not exist is rejected here rather than silently matching nothing;
+	 *  - the sink records the outcome where FoxPanel can read it, which is what
+	 *    makes "applied" a fact rather than an assumption.
+	 */
+	private MotdReloadService createMotdReloadService(ProxyServer proxyIn) {
+		MotdReloadStatusFile statusFile = new MotdReloadStatusFile(dataDir);
+
+		return new MotdReloadService(motdPassthrough.policyReloader(),
+				() -> {
+					// Adapt the full listener configuration down to the three fields a
+					// reload is allowed to apply. Ports, TLS and the passthrough target are
+					// deliberately not carried across.
+					java.util.List<MotdReloadService.ListenerView> views = new java.util.ArrayList<>();
+
+					for (ConfigDataListener listener : EaglerConfigLoader.loadConfig(this)
+							.getListeners().values()) {
+						views.add(new MotdReloadService.ListenerView() {
+
+							@Override
+							public String name() {
+								return listener.getListenerName();
+							}
+
+							@Override
+							public net.lax1dude.eaglercraft.backend.server.api.EnumMotdPassthroughPolicy policy() {
+								return listener.getMotdPassthroughBackendPolicy();
+							}
+
+							@Override
+							public String policyRaw() {
+								return listener.getMotdPassthroughBackendPolicyRaw();
+							}
+
+							@Override
+							public java.util.Collection<String> allowed() {
+								return listener.getMotdPassthroughAllowedBackends();
+							}
+						});
+					}
+
+					return views;
+				},
+				name -> proxyIn.getServer(name).isPresent(),
+				outcome -> {
+					try {
+						statusFile.write(outcome);
+					} catch (IOException ex) {
+						// A status write failure must not turn a good reload into a bad one,
+						// but it does mean the panel cannot confirm it, so it is reported
+						// rather than swallowed.
+						logger().error("Could not write " + MotdReloadStatusFile.FILE_NAME + ": "
+								+ ex.getMessage());
+					}
+
+					if (outcome.ok()) {
+						logger().info("MOTD passthrough policy reloaded: revision " + outcome.revision()
+								+ " active across " + outcome.listeners().size() + " listener(s).");
+					} else {
+						logger().warn("MOTD passthrough reload rejected, revision " + outcome.revision()
+								+ " is still active: " + outcome.error());
+					}
+				});
 	}
 
 	boolean isHeavyConnectionDebugEnabled() {
@@ -424,6 +528,7 @@ public class PlatformPluginVelocity implements IPlatform<Player> {
 		if (aborted) {
 			return;
 		}
+		motdPassthrough.stop();
 		if (onServerDisable != null) {
 			onServerDisable.run();
 		}

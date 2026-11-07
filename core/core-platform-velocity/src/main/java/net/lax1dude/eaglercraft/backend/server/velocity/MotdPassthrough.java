@@ -20,6 +20,7 @@ import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -28,9 +29,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.config.ProxyConfig;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 
+import net.lax1dude.eaglercraft.backend.server.api.EnumMotdPassthroughPolicy;
 import net.lax1dude.eaglercraft.backend.server.api.IEaglerListenerInfo;
 import net.lax1dude.eaglercraft.backend.server.api.query.IMOTDConnection;
 
@@ -92,9 +95,31 @@ class MotdPassthrough {
         private static final long REFRESH_SECONDS = 2L;
         private static final int PING_TIMEOUT_MILLIS = 1500;
 
+        /**
+         * The mode that follows Velocity's own routing instead of a fixed target.
+         */
+        static final String TARGET_AUTO = "auto";
+
+        /**
+         * How long a successful reading stays usable for an {@code auto} decision.
+         *
+         * The poller refreshes every {@link #REFRESH_SECONDS}, so a backend that stops
+         * answering is passed over within this window. Deliberately short: advertising
+         * a dead backend's MOTD as if it were live would be worse than falling back to
+         * the listener's configured one.
+         */
+        private static final long AUTO_SNAPSHOT_TTL_MILLIS = 5000L;
+
         private static final Supplier<Collection<IEaglerListenerInfo>> NO_LISTENERS = Collections::emptyList;
 
         private final ProxyServer proxy;
+
+        /**
+         * The live eligibility policy. A reload replaces one volatile reference, so
+         * the MOTD path below reads it without locking and a reload can never block
+         * an event loop.
+         */
+        private final MotdPolicyReloader policyReloader = new MotdPolicyReloader();
 
         /**
          * The configured listeners, so their per-listener targets can be polled.
@@ -111,6 +136,17 @@ class MotdPassthrough {
         private final Map<String, MotdSnapshot> snapshots = new ConcurrentHashMap<>();
 
         /**
+         * When each snapshot was last CONFIRMED, keyed the same way as
+         * {@link #snapshots}.
+         *
+         * Kept separate because "we have a reading" and "that reading is still true"
+         * are different questions. The fixed-target mode deliberately reuses an old
+         * reading so a blip degrades to a stale MOTD; {@code auto} must stop selecting a
+         * backend that has stopped answering, so it also requires a recent confirmation.
+         */
+        private final Map<String, Long> snapshotTimes = new ConcurrentHashMap<>();
+
+        /**
          * Targets already reported as failing, so an unreachable address cannot
          * spam the console every two seconds. Per target rather than global, so one
          * dead target cannot silence the report for another.
@@ -121,6 +157,14 @@ class MotdPassthrough {
 
         MotdPassthrough(ProxyServer proxy) {
                 this.proxy = proxy;
+        }
+
+        /**
+         * The reloadable policy store, shared with the reload service so the command
+         * that reloads and the code that reads are looking at the same object.
+         */
+        MotdPolicyReloader policyReloader() {
+                return policyReloader;
         }
 
         void start(Object plugin, Supplier<Collection<IEaglerListenerInfo>> listeners) {
@@ -152,6 +196,8 @@ class MotdPassthrough {
          * exceptional.
          */
         void refresh() {
+                reportUnknownAllowedBackends();
+
                 for (Map.Entry<String, InetSocketAddress> entry : collectTargets().entrySet()) {
                         String key = entry.getKey();
                         InetSocketAddress target = entry.getValue();
@@ -160,9 +206,13 @@ class MotdPassthrough {
                                 MotdSnapshot fresh = MotdPing.ping(target, PING_TIMEOUT_MILLIS);
                                 if (fresh.hasMotd()) {
                                         snapshots.put(key, fresh);
+                                        snapshotTimes.put(key, System.currentTimeMillis());
                                         failuresLogged.remove(key);
                                 }
                         } catch (Exception ex) {
+                                // Drop the confirmation so auto stops choosing this backend, while
+                                // keeping the last reading for the fixed-target mode's degradation.
+                                snapshotTimes.remove(key);
                                 // Keep the last good reading, so a blip degrades to a slightly
                                 // stale MOTD instead of blanking it.
                                 logFailure(key, "could not read the Java MOTD from " + describeTarget(target), ex);
@@ -179,8 +229,20 @@ class MotdPassthrough {
          */
         void apply(IMOTDConnection connection) {
                 IEaglerListenerInfo info = listenerInfo(connection);
-                InetSocketAddress target = targetForListener(info == null ? null : info.getName(),
-                                info == null ? null : info.getMotdPassthroughTarget());
+                String listenerName = info == null ? null : info.getName();
+                String configuredTarget = info == null ? null : info.getMotdPassthroughTarget();
+
+                // auto follows Velocity's own routing, which depends on the requested
+                // hostname and so cannot be resolved to a single address up front.
+                if (isAuto(listenerName, configuredTarget)) {
+                        // The listener travels with the call because its eligibility policy and
+                        // allowed list are per listener, and they are only consulted once the
+                        // routing has picked a backend.
+                        applyAuto(connection, info);
+                        return;
+                }
+
+                InetSocketAddress target = targetForListener(listenerName, configuredTarget);
                 if (target == null) {
                         return;
                 }
@@ -190,6 +252,14 @@ class MotdPassthrough {
                         return;
                 }
 
+                applySnapshot(connection, current);
+        }
+
+        /**
+         * Copy a reading onto the response. Shared by both modes so a field can never
+         * be honoured in one and silently dropped in the other.
+         */
+        private static void applySnapshot(IMOTDConnection connection, MotdSnapshot current) {
                 if (current.hasMotd()) {
                         connection.setServerMOTD(current.getMotd());
                 }
@@ -208,6 +278,223 @@ class MotdPassthrough {
         }
 
         /**
+         * Apply the MOTD of the backend Velocity would route this connection to.
+         *
+         * Never pings and never waits: candidates are resolved from the live routing
+         * configuration, which is cheap and always current, and the answer comes from
+         * snapshots the poller already collected. If nothing has been confirmed
+         * recently the listener's own MOTD is left in place, which is the only safe
+         * answer that does not involve blocking the client's server list.
+         */
+        private void applyAuto(IMOTDConnection connection, IEaglerListenerInfo info) {
+                List<String> candidates = autoCandidates(connection);
+                if (candidates.isEmpty()) {
+                        return;
+                }
+
+                // The backend is chosen FIRST, exactly as before, using Velocity's routing order
+                // and the poller's freshness. Eligibility is then applied to that choice.
+                String chosen = MotdRoutingResolver.firstAvailable(candidates, this::hasFreshSnapshot);
+                if (chosen == null) {
+                        // Nothing confirmed yet. The poller fills this in on its next tick; the
+                        // MOTD path must not wait for a backend to answer.
+                        return;
+                }
+
+                // An excluded backend is NOT swapped for the next permitted one. Substituting a
+                // different backend would misreport the network and would describe a server the
+                // player is not being sent to; the setting decides where MOTD text comes from,
+                // never where a player goes. Falling through leaves the listener's own MOTD.
+                // A reloaded policy wins over the startup configuration. The fallback is
+                // what keeps a listener that has never been reloaded (and every listener
+                // on a server where no reload has run) behaving exactly as before.
+                MotdPolicySnapshot.ListenerPolicy live = policyReloader.active()
+                                .forListener(info == null ? null : info.getName());
+
+                EnumMotdPassthroughPolicy policy;
+                Collection<String> allowed;
+
+                if (live != null) {
+                        policy = live.policy();
+                        allowed = live.allowed();
+                } else {
+                        policy = info == null ? EnumMotdPassthroughPolicy.ALL
+                                        : info.getMotdPassthroughBackendPolicy();
+                        allowed = info == null ? Collections.emptyList()
+                                        : info.getMotdPassthroughAllowedBackends();
+                }
+                if (!MotdPassthroughEligibility.permits(policy, allowed, chosen)) {
+                        return;
+                }
+
+                MotdSnapshot snapshot = snapshotForServer(chosen);
+                if (snapshot != null) {
+                        applySnapshot(connection, snapshot);
+                }
+        }
+
+        /**
+         * The backends Velocity would attempt, in its own priority order.
+         */
+        private List<String> autoCandidates(IMOTDConnection connection) {
+                try {
+                        ProxyConfig config = proxy.getConfiguration();
+                        if (config == null) {
+                                return Collections.emptyList();
+                        }
+
+                        return MotdRoutingResolver.candidateOrder(connection.getWebSocketHost(),
+                                        config.getForcedHosts(), config.getAttemptConnectionOrder());
+                } catch (RuntimeException ex) {
+                        // Routing is read live and a reload can race a request; keeping the
+                        // configured MOTD is the safe outcome.
+                        return Collections.emptyList();
+                }
+        }
+
+        private boolean hasFreshSnapshot(String serverName) {
+                InetSocketAddress address = addressForServer(serverName);
+                if (address == null) {
+                        return false;
+                }
+
+                Long confirmedAt = snapshotTimes.get(key(address));
+                if (confirmedAt == null) {
+                        return false;
+                }
+
+                if (System.currentTimeMillis() - confirmedAt > AUTO_SNAPSHOT_TTL_MILLIS) {
+                        return false;
+                }
+
+                MotdSnapshot snapshot = snapshots.get(key(address));
+
+                return snapshot != null && snapshot.hasMotd();
+        }
+
+        private MotdSnapshot snapshotForServer(String serverName) {
+                InetSocketAddress address = addressForServer(serverName);
+
+                return address == null ? null : snapshots.get(key(address));
+        }
+
+        private InetSocketAddress addressForServer(String serverName) {
+                if (serverName == null || serverName.isEmpty()) {
+                        return null;
+                }
+
+                try {
+                        return proxy.getServer(serverName).map(RegisteredServer::getServerInfo)
+                                        .map(info -> info.getAddress()).orElse(null);
+                } catch (RuntimeException ex) {
+                        // A server removed between reading the config and resolving it is normal.
+                        return null;
+                }
+        }
+
+        /**
+         * Poll every backend that auto routing could select.
+         *
+         * Deliberately bounded by the routing configuration (the forced-host lists
+         * plus the default order) rather than by every registered server, so a large
+         * network does not get pinged for backends nobody can be routed to.
+         */
+        private void collectAutoTargets(Map<String, InetSocketAddress> targets) {
+                try {
+                        ProxyConfig config = proxy.getConfiguration();
+                        if (config == null) {
+                                return;
+                        }
+
+                        Map<String, List<String>> forcedHosts = config.getForcedHosts();
+                        if (forcedHosts != null) {
+                                for (List<String> group : forcedHosts.values()) {
+                                        putServerTargets(targets, group);
+                                }
+                        }
+
+                        putServerTargets(targets, config.getAttemptConnectionOrder());
+                } catch (RuntimeException ex) {
+                        // Nothing may escape refresh(): a failure here would stop every target
+                        // from being polled, including the fixed ones.
+                        logFailure(TARGET_AUTO, "could not read Velocity's routing configuration", ex);
+                }
+        }
+
+        private void putServerTargets(Map<String, InetSocketAddress> targets, Collection<String> names) {
+                if (names == null) {
+                        return;
+                }
+
+                for (String name : names) {
+                        putTarget(targets, addressForServer(name));
+                }
+        }
+
+        /**
+         * Whether an {@code auto} decision applies to this listener.
+         */
+        boolean isAuto(String listenerName, String configuredTarget) {
+                return isAutoValue(resolvedTargetValue(listenerName, configuredTarget));
+        }
+
+        /**
+         * The raw configured value for a listener, using the same precedence as the
+         * address resolution: listener property, then listeners.toml, then global.
+         */
+        String resolvedTargetValue(String listenerName, String configuredTarget) {
+                String override = listenerOverride(listenerName);
+                if (override != null) {
+                        return override;
+                }
+
+                if (configuredTarget != null && !configuredTarget.trim().isEmpty()) {
+                        return configuredTarget;
+                }
+
+                return globalTargetValue();
+        }
+
+        static String globalTargetValue() {
+                return firstNonEmpty(System.getProperty(TARGET_PROPERTY), System.getenv(TARGET_ENV));
+        }
+
+        static boolean isAutoValue(String value) {
+                return value != null && TARGET_AUTO.equalsIgnoreCase(value.trim());
+        }
+
+        /**
+         * Whether any listener (or the proxy-wide default) uses auto, so the poller
+         * knows to collect routing candidates at all.
+         */
+        private boolean autoInUse() {
+                Collection<IEaglerListenerInfo> current = listeners.get();
+                if (current == null || current.isEmpty()) {
+                        // Nothing published to filter on yet, so fall back to the proxy-wide
+                        // setting instead of skipping polling entirely.
+                        return isAutoValue(globalTargetValue());
+                }
+
+                MotdPolicySnapshot livePolicy = policyReloader.active();
+
+                for (IEaglerListenerInfo listener : current) {
+                        // A listener whose policy is "none" never reads a backend, so its
+                        // auto target is not worth polling. The reloaded policy, when there is
+                        // one, is the authority; otherwise the startup configuration is.
+                        MotdPolicySnapshot.ListenerPolicy live = livePolicy.forListener(listener.getName());
+                        EnumMotdPassthroughPolicy policy = live != null ? live.policy()
+                                        : listener.getMotdPassthroughBackendPolicy();
+
+                        if (policy != EnumMotdPassthroughPolicy.NONE
+                                        && isAuto(listener.getName(), listener.getMotdPassthroughTarget())) {
+                                return true;
+                        }
+                }
+
+                return false;
+        }
+
+        /**
          * Every address worth polling: the default, plus any address a listener has
          * been pointed at explicitly.
          *
@@ -218,16 +505,18 @@ class MotdPassthrough {
         private Map<String, InetSocketAddress> collectTargets() {
                 Map<String, InetSocketAddress> targets = new LinkedHashMap<>();
 
-                putTarget(targets, defaultTarget());
+                if (!isAutoValue(globalTargetValue())) {
+                        putTarget(targets, defaultTarget());
+                }
 
                 for (String name : System.getProperties().stringPropertyNames()) {
-                        if (name.startsWith(TARGET_PROPERTY_PREFIX)) {
+                        if (name.startsWith(TARGET_PROPERTY_PREFIX) && !isAutoValue(System.getProperty(name))) {
                                 putTarget(targets, parseOverride(System.getProperty(name), name));
                         }
                 }
 
                 for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
-                        if (entry.getKey().startsWith(TARGET_ENV_PREFIX)) {
+                        if (entry.getKey().startsWith(TARGET_ENV_PREFIX) && !isAutoValue(entry.getValue())) {
                                 putTarget(targets, parseOverride(entry.getValue(), entry.getKey()));
                         }
                 }
@@ -236,10 +525,18 @@ class MotdPassthrough {
                 // must be polled too or they would never have a snapshot to apply.
                 for (IEaglerListenerInfo listener : listeners.get()) {
                         String configured = listener.getMotdPassthroughTarget();
-                        if (configured != null && !configured.trim().isEmpty() && !isOptOut(configured)) {
+                        if (configured != null && !configured.trim().isEmpty() && !isOptOut(configured)
+                                                && !isAutoValue(configured)) {
                                 putTarget(targets, parseOverride(configured,
                                                 listenerOverrideKey(listener.getName()) + " (listeners.toml)"));
                         }
+                }
+
+                // In auto mode the target depends on the requested hostname, so every
+                // backend that could ever be selected is polled instead. Bounded by the
+                // routing configuration rather than by the number of registered servers.
+                if (autoInUse()) {
+                        collectAutoTargets(targets);
                 }
 
                 return targets;
@@ -456,6 +753,60 @@ class MotdPassthrough {
 
         private static boolean isIpv6Wildcard(String host) {
                 return host != null && (host.equals("::") || host.equals("0:0:0:0:0:0:0:0"));
+        }
+
+        /**
+         * Report allowed-backend names that no server in velocity.toml defines.
+         *
+         * Runs on the poller rather than on the MOTD path, so a typo is reported once
+         * per name instead of on every status request and never costs anything on a
+         * Netty thread. A name that is not registered simply cannot match a backend,
+         * so the listener keeps its own MOTD rather than failing.
+         */
+        private void reportUnknownAllowedBackends() {
+                Collection<IEaglerListenerInfo> current = listeners.get();
+                if (current == null) {
+                        return;
+                }
+
+                for (IEaglerListenerInfo listener : current) {
+                        if (listener.getMotdPassthroughBackendPolicy() != EnumMotdPassthroughPolicy.SELECTED) {
+                                continue;
+                        }
+
+                        for (String name : listener.getMotdPassthroughAllowedBackends()) {
+                                if (name == null || name.trim().isEmpty()) {
+                                        continue;
+                                }
+
+                                String trimmed = name.trim();
+                                if (proxy.getServer(trimmed).isPresent()) {
+                                        continue;
+                                }
+
+                                logWarning("allowed-backend:" + listener.getName() + ":" + trimmed.toLowerCase(Locale.ROOT),
+                                                "listener \"" + listener.getName() + "\" allows backend \"" + trimmed
+                                                                + "\" in motd_passthrough_allowed_backends, but velocity.toml has no server with that name");
+                        }
+                }
+        }
+
+        /**
+         * Report a problem once per distinct key, without an exception to describe.
+         */
+        private void logWarning(String key, String message) {
+                if (!failuresLogged.add(key)) {
+                        return;
+                }
+
+                ProxyServer target = proxy;
+                if (target == null) {
+                        return;
+                }
+
+                target.sendMessage(net.kyori.adventure.text.Component
+                                .text("[EaglerXServer] " + message)
+                                .color(net.kyori.adventure.text.format.NamedTextColor.YELLOW));
         }
 
         private void logFailure(String key, String message, Throwable cause) {

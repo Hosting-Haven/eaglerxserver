@@ -34,6 +34,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
@@ -115,7 +116,12 @@ final class MotdPing {
          * socket work so the parsing rules can be tested without a server.
          */
         static MotdSnapshot fromJson(String json) throws IOException {
-                JsonElement rootElement = JsonParser.parseString(json);
+                JsonElement rootElement;
+                try {
+                        rootElement = JsonParser.parseString(json);
+                } catch (JsonSyntaxException ex) {
+                        throw new IOException("status response was not valid JSON", ex);
+                }
                 if (!rootElement.isJsonObject()) {
                         throw new IOException("status response was not a JSON object");
                 }

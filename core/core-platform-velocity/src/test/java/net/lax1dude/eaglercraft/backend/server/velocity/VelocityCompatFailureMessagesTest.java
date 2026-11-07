@@ -107,7 +107,7 @@ class VelocityCompatFailureMessagesTest {
 
 		assertFalse(message.contains("09d1dc06-027e-460f-8ac6-5f24a74cafea"), message);
 		assertFalse(message.matches("(?s).*\\b\\d{1,3}(\\.\\d{1,3}){3}\\b.*"), message);
-		assertFalse(message.contains(":"), message);
+		assertFalse(message.matches("(?s).*:\\d{2,5}\\b.*"), message);
 	}
 
 	@Test

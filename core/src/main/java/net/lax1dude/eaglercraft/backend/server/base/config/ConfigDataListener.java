@@ -17,7 +17,10 @@
 package net.lax1dude.eaglercraft.backend.server.base.config;
 
 import java.net.SocketAddress;
+import java.util.Collections;
 import java.util.List;
+
+import net.lax1dude.eaglercraft.backend.server.api.EnumMotdPassthroughPolicy;
 
 public class ConfigDataListener {
 
@@ -84,6 +87,17 @@ public class ConfigDataListener {
 	private final String serverIcon;
 	private final List<String> serverMOTD;
 	private final String motdPassthroughTarget;
+	private final EnumMotdPassthroughPolicy motdPassthroughBackendPolicy;
+	/**
+	 * The value exactly as written in listeners.toml, or null when it was blank.
+	 *
+	 * Kept because the parsed enum cannot express "the operator typed something
+	 * invalid": the loader falls back to ALL so a typo cannot stop the proxy
+	 * booting. A hot reload must be able to tell that fallback apart from a
+	 * deliberate 'all', and reject rather than silently widen the policy.
+	 */
+	private final String motdPassthroughBackendPolicyRaw;
+	private final List<String> motdPassthroughAllowedBackends;
 	private final boolean allowMOTD;
 	private final boolean allowQuery;
 	private final boolean showMOTDPlayerList;
@@ -109,7 +123,9 @@ public class ConfigDataListener {
 			boolean enableTLS, boolean requireTLS, boolean tlsManagedByExternalPlugin, String tlsPublicChainFile,
 			String tlsPrivateKeyFile, String tlsPrivateKeyPassword, boolean tlsAutoRefreshCert,
 			String redirectLegacyClientsTo, String serverIcon, List<String> serverMOTD,
-			String motdPassthroughTarget, boolean allowMOTD,
+			String motdPassthroughTarget, EnumMotdPassthroughPolicy motdPassthroughBackendPolicy,
+			String motdPassthroughBackendPolicyRaw,
+			List<String> motdPassthroughAllowedBackends, boolean allowMOTD,
 			boolean allowQuery, boolean showMOTDPlayerList, boolean allowCookieRevokeQuery, int motdCacheTTL,
 			boolean motdCacheAnimation, boolean motdCacheResults, boolean motdCacheTrending,
 			boolean motdCachePortfolios, ConfigRateLimit limitIP, ConfigRateLimit limitLogin, ConfigRateLimit limitMOTD,
@@ -139,6 +155,13 @@ public class ConfigDataListener {
 		this.serverIcon = serverIcon;
 		this.serverMOTD = serverMOTD;
 		this.motdPassthroughTarget = motdPassthroughTarget;
+		this.motdPassthroughBackendPolicyRaw = motdPassthroughBackendPolicyRaw;
+		this.motdPassthroughBackendPolicy = motdPassthroughBackendPolicy == null
+				? EnumMotdPassthroughPolicy.ALL
+				: motdPassthroughBackendPolicy;
+		this.motdPassthroughAllowedBackends = motdPassthroughAllowedBackends == null
+				? Collections.emptyList()
+				: motdPassthroughAllowedBackends;
 		this.allowMOTD = allowMOTD;
 		this.allowQuery = allowQuery;
 		this.showMOTDPlayerList = showMOTDPlayerList;
@@ -251,6 +274,18 @@ public class ConfigDataListener {
 
 	public String getMotdPassthroughTarget() {
 		return motdPassthroughTarget;
+	}
+
+	public EnumMotdPassthroughPolicy getMotdPassthroughBackendPolicy() {
+		return motdPassthroughBackendPolicy;
+	}
+
+	public String getMotdPassthroughBackendPolicyRaw() {
+		return motdPassthroughBackendPolicyRaw;
+	}
+
+	public List<String> getMotdPassthroughAllowedBackends() {
+		return motdPassthroughAllowedBackends;
 	}
 
 	public boolean isAllowMOTD() {

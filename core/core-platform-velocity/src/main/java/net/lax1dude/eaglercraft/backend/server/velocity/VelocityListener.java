@@ -100,6 +100,8 @@ class VelocityListener {
         @Subscribe(priority = 16384, async = false)
         public void onEaglercraftMOTDEvent(net.lax1dude.eaglercraft.backend.server.api.velocity.event.EaglercraftMOTDEvent event) {
                 motdPassthrough.apply(event.getMOTDConnection());
+        }
+
 	@Subscribe(priority = -16384, async = false)
 	public void onGameProfileRequestEvent(GameProfileRequestEvent gameProfileEvent) {
 		IPipelineData pipelineData = VelocityUnsafe.getInboundChannel(gameProfileEvent.getConnection())
@@ -322,7 +324,7 @@ class VelocityListener {
 			String reasonText = plainReason(backendReason);
 
 			CompatFailure failure = CompatFailureClassifier.classify(mapStatus(status), reasonKindOf(backendReason),
-					reasonText, throwable);
+					throwable);
 
 			CompatRetryStep step = CompatRetryStep.next(failure, attemptIndex, transientRetries, plan.length,
 					MAX_PROTOCOL_RETRIES, MAX_TRANSIENT_RETRIES);
